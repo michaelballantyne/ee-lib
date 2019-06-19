@@ -1,0 +1,251 @@
+#lang racket/base
+
+(require
+  syntax/apply-transformer
+  racket/syntax
+  syntax/parse
+  (for-syntax
+   racket/base
+   syntax/parse
+   racket/syntax
+   syntax/transformer)
+  (for-template racket/base))
+
+(provide
+ qstx/rc
+ 
+ with-disappeared-uses-and-bindings
+ record-disappeared-bindings
+
+ 
+ bind!
+ make-def-ctx
+ make-scope
+ scope?
+ scope-introducer
+ add-scope
+ add-scopes
+ unbound
+ lookup
+ apply-as-transformer
+ define/hygienic 
+ 
+ )
+
+(define-syntax (qstx/rc stx)
+  (syntax-case stx ()
+    [(_ template)
+     #`(datum->syntax (quote-syntax #,stx)
+                      (syntax-e (quasisyntax template))
+                      this-syntax this-syntax)]))
+
+; racket/syntax currently has tools for disappeared uses,
+; but not disappeared bindings. This is a copy-paste-and-modify job
+; that should be integrated into a future release of that collection.
+  
+(define current-recorded-disappeared-bindings (make-parameter #f))
+
+(define (record-disappeared-bindings ids)
+  (cond
+    [(identifier? ids) (record-disappeared-bindings (list ids))]
+    [(and (list? ids) (andmap identifier? ids))
+     (let ([uses (current-recorded-disappeared-bindings)])
+       (when uses
+         (current-recorded-disappeared-bindings 
+          (append
+           (if (syntax-transforming?)
+               (map syntax-local-introduce ids)
+               ids)
+           uses))))]
+    [else (raise-argument-error 'record-disappeared-bindings
+                                "(or/c identifier? (listof identifier?))"
+                                ids)]))
+
+(define-syntax-rule (with-disappeared-bindings body-expr ... stx-expr)
+  (let-values ([(stx disappeared-bindings)
+                (parameterize ((current-recorded-disappeared-bindings null))
+                  (let ([result (let () body-expr ... stx-expr)])
+                    (values result (current-recorded-disappeared-bindings))))])
+    (syntax-property stx
+                     'disappeared-binding
+                     (append (or (syntax-property stx 'disappeared-binding) null)
+                             disappeared-bindings))))
+
+(define-syntax-rule (with-disappeared-uses-and-bindings body-expr ... stx-expr)
+  (with-disappeared-uses
+   (with-disappeared-bindings
+    (parameterize ([current-def-ctx (make-def-ctx)])
+      body-expr ... stx-expr))))
+
+
+; Light wrappers around the scope and definition context APIs for convenience
+; and automatic disappeared tracking. It would be really nice to make something
+; like these part of the standard library...
+
+(struct scope [introducer])
+
+(define (make-scope) (scope (make-syntax-introducer #t)))
+
+(define (add-scope stx sc)
+  (unless (syntax? stx)
+    (raise-argument-error
+     'add-scope
+     "syntax?"
+     stx))
+  (unless (scope? sc)
+    (raise-argument-error
+     'add-scope
+     "scope?"
+     sc))
+  ((scope-introducer sc) stx 'add))
+
+(define (add-scopes stx scs)
+  (unless (syntax? stx)
+    (raise-argument-error
+     'add-scopes
+     "syntax?"
+     stx))
+  (unless (and (list? scs) (andmap scope? scs))
+    (raise-argument-error
+     'add-scopes
+     "(listof scope?)"
+     scs))
+  
+  (for/fold ([stx stx])
+            ([sc scs])
+    ((scope-introducer sc) stx 'add)))
+
+
+(define (make-def-ctx) (syntax-local-make-definition-context))
+
+(define (add-ctx-scope ctx stx)
+  (if ctx
+      (internal-definition-context-introduce ctx stx 'add)
+      stx))
+
+(define (bind! id rhs)
+  (define ctx (current-def-ctx))
+  (unless (internal-definition-context? ctx)
+    (raise-argument-error
+     'bind!
+     "internal-definition-context?"
+     ctx))
+  (unless (identifier? id)
+    (raise-argument-error
+     'bind!
+     "identifier?"
+     id))
+  (unless (or (not rhs) (syntax? rhs))
+    (raise-argument-error
+     'bind!
+     "(or/c #f syntax?)"
+     rhs))
+  
+  (syntax-local-bind-syntaxes (list id) rhs ctx)
+  (define id-in-sc (add-ctx-scope ctx (syntax-local-identifier-as-binding id)))
+  (record-disappeared-bindings id-in-sc)
+  id-in-sc)
+
+; used only for eq? equality.
+(define unbound
+  (let ()
+    (struct unbound [])
+    (unbound)))
+
+(define (lookup id)
+  (define ctx (current-def-ctx))
+  (unless (or (not ctx) (internal-definition-context? ctx))
+    (raise-argument-error
+     'lookup
+     "(or/c #f internal-definition-context?)"
+     ctx))
+  (unless (identifier? id)
+    (raise-argument-error
+     'lookup
+     "identifier?"
+     id))
+  
+  (define id-in-sc (add-ctx-scope ctx id))
+  (define result
+    (syntax-local-value
+     id-in-sc
+     (lambda () unbound)
+     ctx))
+
+  (unless (eq? result unbound)
+    (record-disappeared-uses id-in-sc))
+  
+  result)
+
+; Apply as transformer. Perhaps should eventually be added to
+; syntax/apply-transformer?
+
+(struct wrapper (contents))
+
+(define (wrap arg)
+  (if (syntax? arg)
+      arg
+      (wrapper arg)))
+
+(define (unwrap arg)
+  (if (syntax? arg)
+      (let ([e (syntax-e arg)])
+        (if (wrapper? e)
+            (wrapper-contents e)
+            arg))
+      arg))
+
+(define current-def-ctx (make-parameter #f))
+(define current-ctx-id (make-parameter #f))
+
+(define (apply-as-transformer f ctx-type . args)
+  (define before (car args))
+  (unless (procedure? f)
+    (raise-argument-error
+     'apply-as-transformer
+     "procedure?"
+     f))
+
+  (define (single-argument-transformer stx)
+    (parameterize ([current-def-ctx (make-def-ctx)]
+                   [current-ctx-id (gensym 'apply-as-transformer-ctx)])
+      (call-with-values
+       (lambda () (apply f (map unwrap (syntax->list stx))))
+       (lambda vs (datum->syntax #f (map wrap vs))))))
+
+  (define ctx (current-def-ctx))
+  (define res
+    (local-apply-transformer
+     single-argument-transformer
+     (datum->syntax #f (map wrap args))
+     (case ctx-type
+       [(expression) 'expression]
+       [(definition) (list (current-ctx-id))])
+     (cond
+       [(internal-definition-context? ctx) (list ctx)]
+       [(list? ctx) ctx]
+       [(not ctx) '()]
+       [else (raise-argument-error
+              'apply-as-transformer
+              "(or/c internal-definition-context? (listof internal-definition-context?) #f)"
+              ctx)])))
+  (define after (car (map unwrap (syntax->list res))))
+  (apply values (map unwrap (syntax->list res))))
+
+(begin-for-syntax
+  (define-syntax-class ctx-type
+    (pattern #:expression
+             #:attr type #''expression)
+    (pattern #:definition
+             #:attr type #''definition)))
+
+(define-syntax define/hygienic
+  (syntax-parser
+    [(_ (name arg ...) ctx:ctx-type
+        body ...)
+     #'(begin
+         (define (tmp arg ...)
+           body ...)
+         (define (name arg ...)
+           (apply-as-transformer tmp ctx.type arg ...)))]))
+     

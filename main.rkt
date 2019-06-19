@@ -198,7 +198,7 @@
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
 
-(define (apply-as-transformer f ctx-type . args)
+(define (apply-as-transformer f ctx-type-arg . args)
   (define before (car args))
   (unless (procedure? f)
     (raise-argument-error
@@ -213,14 +213,21 @@
        (lambda () (apply f (map unwrap (syntax->list stx))))
        (lambda vs (datum->syntax #f (map wrap vs))))))
 
+  (define ctx-type
+    (case ctx-type-arg
+       [(expression) 'expression]
+       [(definition)
+        (let ([ctx-id (current-ctx-id)])
+          (unless ctx-id
+            (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
+          (list ctx-id))]))
+  
   (define ctx (current-def-ctx))
   (define res
     (local-apply-transformer
      single-argument-transformer
      (datum->syntax #f (map wrap args))
-     (case ctx-type
-       [(expression) 'expression]
-       [(definition) (list (current-ctx-id))])
+     ctx-type
      (cond
        [(internal-definition-context? ctx) (list ctx)]
        [(list? ctx) ctx]

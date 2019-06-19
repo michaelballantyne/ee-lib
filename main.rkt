@@ -73,9 +73,9 @@
 
 (define-syntax-rule (with-disappeared-uses-and-bindings body-expr ... stx-expr)
   (with-disappeared-uses
-   (with-disappeared-bindings
-    (parameterize ([current-def-ctx (make-def-ctx)])
-      body-expr ... stx-expr))))
+      (with-disappeared-bindings
+          (parameterize ([current-def-ctx (make-def-ctx)])
+            body-expr ... stx-expr))))
 
 
 ; Light wrappers around the scope and definition context APIs for convenience
@@ -207,20 +207,27 @@
      f))
 
   (define (single-argument-transformer stx)
-    (parameterize ([current-def-ctx (make-def-ctx)]
-                   [current-ctx-id (gensym 'apply-as-transformer-ctx)])
+    (define (go)
       (call-with-values
        (lambda () (apply f (map unwrap (syntax->list stx))))
-       (lambda vs (datum->syntax #f (map wrap vs))))))
+       (lambda vs (datum->syntax #f (map wrap vs)))))
+
+    (case ctx-type-arg
+      [(expression)
+       (parameterize ([current-def-ctx (make-def-ctx)]
+                      [current-ctx-id (gensym 'apply-as-transformer-ctx)])
+         (go))]
+      [(definition)
+       (go)]))
 
   (define ctx-type
     (case ctx-type-arg
-       [(expression) 'expression]
-       [(definition)
-        (let ([ctx-id (current-ctx-id)])
-          (unless ctx-id
-            (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
-          (list ctx-id))]))
+      [(expression) 'expression]
+      [(definition)
+       (let ([ctx-id (current-ctx-id)])
+         (unless ctx-id
+           (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
+         (list ctx-id))]))
   
   (define ctx (current-def-ctx))
   (define res

@@ -8,13 +8,14 @@
    racket/base
    syntax/parse
    racket/syntax
-   syntax/transformer)
+   syntax/transformer
+   (only-in syntax/parse [define/syntax-parse def/stx]))
   (for-template racket/base))
 
 (provide
  qstx/rc
  
- with-disappeared-uses-and-bindings
+ ee-lib-boundary
  record-disappeared-bindings
 
  
@@ -29,7 +30,8 @@
  lookup
  apply-as-transformer
  define/hygienic 
- 
+
+ map-transform
  )
 
 (define-syntax (qstx/rc stx)
@@ -71,10 +73,11 @@
                      (append (or (syntax-property stx 'disappeared-binding) null)
                              disappeared-bindings))))
 
-(define-syntax-rule (with-disappeared-uses-and-bindings body-expr ... stx-expr)
+(define-syntax-rule (ee-lib-boundary body-expr ... stx-expr)
   (with-disappeared-uses
       (with-disappeared-bindings
-          (parameterize ([current-def-ctx (make-def-ctx)])
+          (parameterize ([current-def-ctx (make-def-ctx)]
+                         [current-ctx-id (gensym 'apply-as-transformer-ctx)])
             body-expr ... stx-expr))))
 
 
@@ -262,4 +265,29 @@
            body ...)
          (define (name arg ...)
            (apply-as-transformer tmp ctx.type arg ...)))]))
-     
+
+(define-syntax generic+rep
+  (syntax-parser
+    #:literals (define)
+    [(_ name
+        (fields)
+        (define header . body) ...)
+     #'(begin
+         (define-generics name))]))
+
+; applies the function f to each element of the tree, starting
+; from the leaves. For nodes wrapped as a syntax object, the function
+; is applied to the syntax object but not its immediate datum contents.
+(define (map-transform f stx)
+  (define (recur stx)
+    (cond
+      [(syntax? stx)
+       (let ([e (syntax-e stx)])
+         (datum->syntax stx (recur e) stx stx))]
+      [(pair? stx)
+       (cons
+        (map-transform f (car stx))
+        (map-transform f (cdr stx)))]
+      ; TODO: handle vectors and other composite data that may appear in syntax
+      [else stx]))
+  (f (recur stx)))

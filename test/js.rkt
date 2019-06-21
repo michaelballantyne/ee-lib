@@ -280,7 +280,7 @@
 (define-syntax js
   (syntax-parser
     [(_ arg)
-     (with-disappeared-uses-and-bindings
+     (ee-lib-boundary
          (def/stx expanded-js (js-expand-expression #'arg))
        (def/stx extracted (do-extract #'expanded-js))
        #'(begin

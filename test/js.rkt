@@ -72,13 +72,13 @@
          (raise-syntax-error #f "unbound identifier" #'x))
        this-syntax]
       [(function (x:id ...) body ...)
-       (define sc (make-scope))
-       (def/stx (x^ ...)
-         (for/list ([x (syntax->list #'(x ...))])
-           (bind-var! (add-scope x sc))))
-       (def/stx (body^ ...)
-         (expand-block (add-scope #'(body ...) sc)))
-       (qstx/rc (function (x^ ...) body^ ...))]
+       (with-scope sc
+         (def/stx (x^ ...)
+           (for/list ([x (syntax->list #'(x ...))])
+             (bind-var! (add-scope x sc))))
+         (def/stx (body^ ...)
+           (expand-block (add-scope #'(body ...) sc)))
+         (qstx/rc (function (x^ ...) body^ ...)))]
       [(#%js-app e e* ...)
        (qstx/rc (#%js-app #,(js-expand-expression #'e)
                           #,@(stx-map js-expand-expression #'(e* ...))))]
@@ -149,12 +149,12 @@
       [_ (js-expand-expression stx)]))
 
   (define (expand-block body)
-    (define sc (make-scope))
-    (define body^
-      (for/list ([b (syntax->list body)])
-        (js-expand-statement-pass1 (add-scope b sc))))
-    (for/list ([b body^])
-      (js-expand-statement-pass2 b)))
+    (with-scope sc
+      (define body^
+        (for/list ([b (syntax->list body)])
+          (js-expand-statement-pass1 (add-scope b sc))))
+      (for/list ([b body^])
+        (js-expand-statement-pass2 b))))
 
   ; Compilation to JS
   (define (extract-js-expression stx)
@@ -281,12 +281,12 @@
   (syntax-parser
     [(_ arg)
      (ee-lib-boundary
-         (def/stx expanded-js (js-expand-expression #'arg))
-       (def/stx extracted (do-extract #'expanded-js))
-       #'(begin
-           (define wrapped (hash 'type "ExpressionStatement" 'expression 'extracted))
-           ;(pretty-display wrapped)
-           (runjs wrapped)))]))
+      (def/stx expanded-js (js-expand-expression #'arg))
+      (def/stx extracted (do-extract #'expanded-js))
+      #'(begin
+          (define wrapped (hash 'type "ExpressionStatement" 'expression 'extracted))
+          ;(pretty-display wrapped)
+          (runjs wrapped)))]))
 
 (define-syntax-rule
   (define-js-macro name e)
@@ -312,6 +312,8 @@
 
 
 (module+ test
+  (js ((function (n)
+                 (return n))))
   (js ((function ()
                  (let factorial (function (n)
                                           5 ; expressions are allowed in statement position

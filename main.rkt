@@ -20,16 +20,17 @@
 
  
  bind!
- make-def-ctx
- make-scope
+ with-scope
  scope?
  scope-introducer
  add-scope
+ remove-scope
  add-scopes
  unbound
  lookup
  apply-as-transformer
- define/hygienic 
+ define/hygienic
+ current-def-ctx
 
  map-transform
  )
@@ -76,9 +77,11 @@
 (define-syntax-rule (ee-lib-boundary body-expr ... stx-expr)
   (with-disappeared-uses
       (with-disappeared-bindings
-          (parameterize ([current-def-ctx (make-def-ctx)]
-                         [current-ctx-id (gensym 'apply-as-transformer-ctx)])
-            body-expr ... stx-expr))))
+          (let ([ctx (syntax-local-make-definition-context #f)])
+            (parameterize ([current-def-ctx ctx]
+                           [local-def-ctxs (cons ctx (local-def-ctxs))]
+                           [current-ctx-id (gensym 'apply-as-transformer-ctx)])
+              body-expr ... stx-expr)))))
 
 
 ; Light wrappers around the scope and definition context APIs for convenience
@@ -88,6 +91,16 @@
 (struct scope [introducer])
 
 (define (make-scope) (scope (make-syntax-introducer #t)))
+
+(define-syntax-rule
+  (with-scope name body ...)
+  (let ([name (make-scope)]
+        [ctx (syntax-local-make-definition-context (current-def-ctx))])
+    (parameterize ([current-def-ctx ctx]
+                   [local-def-ctxs (cons ctx (local-def-ctxs))]
+                   [current-ctx-id (gensym 'with-scope-ctx)])
+      (let ()
+        body ...))))
 
 (define (add-scope stx sc)
   (unless (syntax? stx)
@@ -101,6 +114,19 @@
      "scope?"
      sc))
   ((scope-introducer sc) stx 'add))
+
+(define (remove-scope stx sc)
+  (unless (syntax? stx)
+    (raise-argument-error
+     'remove-scope
+     "syntax?"
+     stx))
+  (unless (scope? sc)
+    (raise-argument-error
+     'remove-scope
+     "scope?"
+     sc))
+  ((scope-introducer sc) stx 'remove))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)
@@ -126,6 +152,11 @@
       (internal-definition-context-introduce ctx stx 'add)
       stx))
 
+(define (add-ctxs-scopes ctxs stx)
+  (for/fold ([stx stx])
+            ([ctx ctxs])
+    (add-ctx-scope ctx stx)))
+
 (define (bind! id rhs)
   (define ctx (current-def-ctx))
   (unless (internal-definition-context? ctx)
@@ -145,7 +176,7 @@
      rhs))
   
   (syntax-local-bind-syntaxes (list id) rhs ctx)
-  (define id-in-sc (add-ctx-scope ctx (syntax-local-identifier-as-binding id)))
+  (define id-in-sc (add-ctxs-scopes (local-def-ctxs) (syntax-local-identifier-as-binding id)))
   (record-disappeared-bindings id-in-sc)
   id-in-sc)
 
@@ -168,7 +199,8 @@
      "identifier?"
      id))
   
-  (define id-in-sc (add-ctx-scope ctx id))
+  (define id-in-sc (add-ctxs-scopes (local-def-ctxs) id))
+  #;(displayln (syntax-debug-info (syntax-local-introduce id-in-sc)))
   (define result
     (syntax-local-value
      id-in-sc
@@ -200,6 +232,7 @@
 
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
+(define local-def-ctxs (make-parameter '()))
 
 (define (apply-as-transformer f ctx-type-arg . args)
   (define before (car args))
@@ -209,7 +242,8 @@
      "procedure?"
      f))
 
-  (define (single-argument-transformer stx)
+  (define (single-argument-transformer stx-arg)
+    (define stx (add-ctxs-scopes (local-def-ctxs) stx-arg))
     (define (go)
       (call-with-values
        (lambda () (apply f (map unwrap (syntax->list stx))))
@@ -217,8 +251,7 @@
 
     (case ctx-type-arg
       [(expression)
-       (parameterize ([current-def-ctx (make-def-ctx)]
-                      [current-ctx-id (gensym 'apply-as-transformer-ctx)])
+       (parameterize ([local-def-ctxs '()])
          (go))]
       [(definition)
        (go)]))

@@ -24,7 +24,7 @@
  scope?
  scope-introducer
  add-scope
- remove-scope
+ splice-from-scope
  add-scopes
  unbound
  lookup
@@ -88,14 +88,16 @@
 ; and automatic disappeared tracking. It would be really nice to make something
 ; like these part of the standard library...
 
-(struct scope [introducer])
+(struct scope [introducer def-ctx])
 
-(define (make-scope) (scope (make-syntax-introducer #t)))
+(define (make-scope)
+  (let ([ctx (syntax-local-make-definition-context (current-def-ctx))])
+    (values (scope (make-syntax-introducer #t) ctx)
+            ctx)))
 
 (define-syntax-rule
   (with-scope name body ...)
-  (let ([name (make-scope)]
-        [ctx (syntax-local-make-definition-context (current-def-ctx))])
+  (let-values ([(name ctx) (make-scope)])
     (parameterize ([current-def-ctx ctx]
                    [local-def-ctxs (cons ctx (local-def-ctxs))]
                    [current-ctx-id (gensym 'with-scope-ctx)])
@@ -115,7 +117,7 @@
      sc))
   ((scope-introducer sc) stx 'add))
 
-(define (remove-scope stx sc)
+(define (splice-from-scope stx sc)
   (unless (syntax? stx)
     (raise-argument-error
      'remove-scope
@@ -126,7 +128,10 @@
      'remove-scope
      "scope?"
      sc))
-  ((scope-introducer sc) stx 'remove))
+  (internal-definition-context-introduce
+   (scope-def-ctx sc)
+   ((scope-introducer sc) stx 'remove)
+   'remove))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)

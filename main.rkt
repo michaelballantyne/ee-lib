@@ -31,6 +31,7 @@
  apply-as-transformer
  define/hygienic
  current-def-ctx
+ current-ctx-id
 
  map-transform
  syntax-local-introduce-splice

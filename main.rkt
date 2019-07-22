@@ -33,6 +33,7 @@
  current-def-ctx
 
  map-transform
+ syntax-local-introduce-splice
  )
 
 (define-syntax (qstx/rc stx)
@@ -216,6 +217,11 @@
     (record-disappeared-uses id-in-sc))
   
   result)
+
+
+(define (syntax-local-introduce-splice stx)
+  (syntax-local-identifier-as-binding
+   (syntax-local-introduce stx)))
 
 ; Apply as transformer. Perhaps should eventually be added to
 ; syntax/apply-transformer?

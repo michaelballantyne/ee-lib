@@ -32,6 +32,7 @@
  define/hygienic
  current-def-ctx
  current-ctx-id
+ current-local-def-ctxs
 
  map-transform
  syntax-local-introduce-splice
@@ -81,7 +82,7 @@
       (with-disappeared-bindings
           (let ([ctx (syntax-local-make-definition-context #f)])
             (parameterize ([current-def-ctx ctx]
-                           [local-def-ctxs (cons ctx (local-def-ctxs))]
+                           [current-local-def-ctxs (cons ctx (current-local-def-ctxs))]
                            [current-ctx-id (gensym 'apply-as-transformer-ctx)])
               body-expr ... stx-expr)))))
 
@@ -101,7 +102,7 @@
   (with-scope name body ...)
   (let-values ([(name ctx) (make-scope)])
     (parameterize ([current-def-ctx ctx]
-                   [local-def-ctxs (cons ctx (local-def-ctxs))]
+                   [current-local-def-ctxs (cons ctx (current-local-def-ctxs))]
                    [current-ctx-id (gensym 'with-scope-ctx)])
       (let ()
         body ...))))
@@ -183,7 +184,7 @@
      rhs))
   
   (syntax-local-bind-syntaxes (list id) rhs ctx)
-  (define id-in-sc (add-ctxs-scopes (local-def-ctxs) (syntax-local-identifier-as-binding id)))
+  (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) (syntax-local-identifier-as-binding id)))
   (record-disappeared-bindings id-in-sc)
   id-in-sc)
 
@@ -206,7 +207,7 @@
      "identifier?"
      id))
   
-  (define id-in-sc (add-ctxs-scopes (local-def-ctxs) id))
+  (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) id))
   #;(displayln (syntax-debug-info (syntax-local-introduce id-in-sc)))
   (define result
     (syntax-local-value
@@ -244,7 +245,7 @@
 
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
-(define local-def-ctxs (make-parameter '()))
+(define current-local-def-ctxs (make-parameter '()))
 
 (define (apply-as-transformer f ctx-type-arg . args)
   (define before (car args))
@@ -255,7 +256,7 @@
      f))
 
   (define (single-argument-transformer stx-arg)
-    (define stx (add-ctxs-scopes (local-def-ctxs) stx-arg))
+    (define stx (add-ctxs-scopes (current-local-def-ctxs) stx-arg))
     (define (go)
       (call-with-values
        (lambda () (apply f (map unwrap (syntax->list stx))))
@@ -263,7 +264,7 @@
 
     (case ctx-type-arg
       [(expression)
-       (parameterize ([local-def-ctxs '()])
+       (parameterize ([current-local-def-ctxs '()])
          (go))]
       [(definition)
        (go)]))

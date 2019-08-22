@@ -272,9 +272,9 @@
       [(expression) 'expression]
       [(definition)
        (let ([ctx-id (current-ctx-id)])
-         (unless ctx-id
-           (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
-         (list ctx-id))]))
+         #;(unless ctx-id
+             (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
+         (if ctx-id (list ctx-id) (syntax-local-context)))]))
   
   (define ctx (current-def-ctx))
   (define res
@@ -309,6 +309,20 @@
            body ...)
          (define (name arg ...)
            (apply-as-transformer tmp ctx.type arg ...)))]))
+
+(require syntax/parse/experimental/template)
+(provide define/hygienic-metafunction)
+(define-syntax define/hygienic-metafunction
+  (syntax-parser
+    [(_ (name arg) ctx:ctx-type
+        body ...)
+     #'(begin
+         (define (tmp arg)
+           body ...)
+         (define-template-metafunction (name stx)
+           (syntax-parse stx
+             [(_ t)
+              (apply-as-transformer tmp ctx.type #'t)])))]))
 
 (define-syntax generic+rep
   (syntax-parser

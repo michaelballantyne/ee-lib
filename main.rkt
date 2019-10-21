@@ -13,7 +13,8 @@
   (for-template racket/base))
 
 (provide
- qstx/rc
+ qstx/rc ; read as quasisyntax/loc+props
+ qstx/lp
  
  ee-lib-boundary
  record-disappeared-bindings
@@ -37,6 +38,14 @@
  map-transform
  syntax-local-introduce-splice
  )
+
+(define-syntax (qstx/lp stx)
+  (syntax-case stx ()
+    [(_ arg template)
+     #`(let ([orig arg])
+         (datum->syntax (quote-syntax #,stx)
+                        (syntax-e (quasisyntax template))
+                        orig orig))]))
 
 (define-syntax (qstx/rc stx)
   (syntax-case stx ()

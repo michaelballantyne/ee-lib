@@ -15,7 +15,8 @@
   (for-template racket/base))
 
 (provide
- qstx/rc
+ qstx/rc ; read as quasisyntax/loc+props
+ qstx/lp
  
  ee-lib-boundary
  record-disappeared-bindings
@@ -39,6 +40,14 @@
  map-transform
  syntax-local-introduce-splice
  fresh-symbol-table%)
+
+(define-syntax (qstx/lp stx)
+  (syntax-case stx ()
+    [(_ arg template)
+     #`(let ([orig arg])
+         (datum->syntax (quote-syntax #,stx)
+                        (syntax-e (quasisyntax template))
+                        orig orig))]))
 
 (define-syntax (qstx/rc stx)
   (syntax-case stx ()
@@ -358,13 +367,13 @@
   (class object%
     (super-new)
     (field [table (make-free-id-table)])
-    
+
     (define/public (compile-name! id)
       (let ([result (generate-temporary id)])
         (free-id-table-set! table (syntax-local-introduce id) result)
         (syntax-local-introduce
          result)))
-    
+
     (define/public (compiled-name id)
       (syntax-local-introduce
        (free-id-table-ref table (syntax-local-introduce id))))))

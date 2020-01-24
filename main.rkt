@@ -4,6 +4,8 @@
   syntax/apply-transformer
   racket/syntax
   syntax/parse
+  racket/class
+  syntax/id-table
   (for-syntax
    racket/base
    syntax/parse
@@ -36,7 +38,7 @@
 
  map-transform
  syntax-local-introduce-splice
- )
+ fresh-symbol-table%)
 
 (define-syntax (qstx/rc stx)
   (syntax-case stx ()
@@ -305,7 +307,7 @@
 (define-syntax define/hygienic
   (syntax-parser
     [(_ (name arg ...) ctx:ctx-type
-        body ...)
+        body ...+)
      #'(begin
          (define (tmp arg ...)
            body ...)
@@ -351,3 +353,18 @@
       ; TODO: handle vectors and other composite data that may appear in syntax
       [else stx]))
   (f (recur stx)))
+
+(define fresh-symbol-table%
+  (class object%
+    (super-new)
+    (field [table (make-free-id-table)])
+    
+    (define/public (compile-name! id)
+      (let ([result (generate-temporary id)])
+        (free-id-table-set! table (syntax-local-introduce id) result)
+        (syntax-local-introduce
+         result)))
+    
+    (define/public (compiled-name id)
+      (syntax-local-introduce
+       (free-id-table-ref table (syntax-local-introduce id))))))

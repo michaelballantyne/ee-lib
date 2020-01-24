@@ -1,0 +1,31 @@
+Binding, after compilation of outer:
+
+#(69052 module a)---module inside-ed. Not sure why the reference doesn't get this.
+#(72568 intdef)---The compile define/hygienic local-expand
+#(72600 macro)---common, gensym
+
+Binding, after let expands:
+
+#(69052 module a)---module inside-ed. Not sure why the reference doesn't get this. Probably because of an
+   optimization to only apply it when immediately splicing in?
+#(72568 intdef)---The compile define/hygienic local-expand. Problem! Do we need a different mode
+   of define/hygienic for compilation passes that want to introduce binders and references hygienically,
+   but don't locally bind, don't have to worry about some of the use-site scope issues?
+#(72600 macro)---common, gensym
+#(72615 local)---the let scope. Problem!
+   This one seems more fundamental. We're forced to delay compilation of the resumption until the environment
+   has the needed binding, but as a consequence the compiled reference isn't part of the term being expanded
+   and doesn't get the scope! I can imagine hacking around this with syntax-local-get-shadower, but...
+
+Reference:
+
+#(72590 intdef)---the stashed away definition context scope
+
+#(72600 macro)---common
+
+#(72622 intdef)---maybe the new definition context's parent?
+#(72624 intdef)---maybe the new definition context?
+
+
+I might need a get-shadower?
+

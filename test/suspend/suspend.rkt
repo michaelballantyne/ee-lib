@@ -6,6 +6,7 @@
   "../../define.rkt"
   (for-syntax
    racket
+   syntax/id-table
    (rename-in syntax/parse [define/syntax-parse def/stx])
    "../../main.rkt"))
 
@@ -37,20 +38,20 @@
       [(myrkt e (~optional _))
        (qstx/rc (myrkt e #,(current-def-ctx)))]))
 
-  (define symtable (new fresh-symbol-table%))
+  (define symtable (make-free-id-table))
   
   (define (my-compile stx)
     (syntax-parse stx
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
-       (def/stx v^ (send symtable compile-name! #'v))
+       (def/stx v^ (add-fresh-name! symtable #'v))
        (displayln 'compiled-binding)
        (displayln (syntax-debug-info #'v^ (syntax-local-phase-level) #t))
        #`(let ([v^ 'v]) #,(my-compile #'b))]
       [(mycons e1 e2)
        #`(cons #,(my-compile #'e1) #,(my-compile #'e2))]
       [x:id
-       (define res (syntax-local-get-shadower (send symtable compiled-name #'x) #t))
+       (define res (syntax-local-get-shadower (free-id-table-ref symtable #'x) #t))
        (displayln 'compiled-ref)
        (displayln (syntax-debug-info res (syntax-local-phase-level) #t))
        res]

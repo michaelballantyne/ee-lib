@@ -4,9 +4,13 @@
   syntax/apply-transformer
   racket/syntax
   syntax/parse
+  syntax/parse/define
+
   racket/class
   syntax/id-table
-  (for-template "lift-disappeared.rkt")
+  (rename-in "private/apply-as-transformer.rkt"
+             [apply-as-transformer prim-apply-as-transformer])
+  (for-template "private/lift-disappeareds.rkt")
   (for-syntax
    racket/base
    syntax/parse
@@ -20,6 +24,7 @@
  qstx/lp
 
  bind!
+ racket-var
  with-scope
  scope?
  scope-introducer
@@ -56,25 +61,23 @@
                       this-syntax this-syntax)]))
 
 
-; Light wrappers around the scope and definition context APIs for convenience
-; and automatic disappeared tracking. It would be really nice to make something
-; like these part of the standard library...
+(define current-def-ctx (make-parameter #f))
+(define current-ctx-id (make-parameter #f))
+(define current-local-def-ctxs (make-parameter '()))
 
 (struct scope [introducer def-ctx])
 
-(define (make-scope)
-  (let ([ctx (syntax-local-make-definition-context (current-def-ctx))])
-    (values (scope (make-syntax-introducer #t) ctx)
-            ctx)))
-
-(define-syntax-rule
-  (with-scope name body ...)
-  (let-values ([(name ctx) (make-scope)])
-    (parameterize ([current-def-ctx ctx]
-                   [current-local-def-ctxs (cons ctx (current-local-def-ctxs))]
+(define (call-with-scope p)
+  (let* ([ctx (syntax-local-make-definition-context (current-def-ctx))]
+         [sc (scope (make-syntax-introducer #t) ctx)])
+    (parameterize ([current-def-ctx (scope-def-ctx sc)]
+                   [current-local-def-ctxs (cons (scope-def-ctx sc) (current-local-def-ctxs))]
                    [current-ctx-id (gensym 'with-scope-ctx)])
-      (let ()
-        body ...))))
+      (p sc))))
+
+(define-simple-macro
+  (with-scope name:id body ...)
+  (call-with-scope (lambda (name) body ...)))
 
 (define (add-scope stx sc)
   (unless (syntax? stx)
@@ -88,22 +91,6 @@
      "scope?"
      sc))
   ((scope-introducer sc) stx 'add))
-
-(define (splice-from-scope stx sc)
-  (unless (syntax? stx)
-    (raise-argument-error
-     'remove-scope
-     "syntax?"
-     stx))
-  (unless (scope? sc)
-    (raise-argument-error
-     'remove-scope
-     "scope?"
-     sc))
-  (internal-definition-context-introduce
-   (scope-def-ctx sc)
-   ((scope-introducer sc) stx 'remove)
-   'remove))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)
@@ -121,42 +108,67 @@
             ([sc scs])
     ((scope-introducer sc) stx 'add)))
 
-
-(define (make-def-ctx) (syntax-local-make-definition-context))
-
-(define (add-ctx-scope ctx stx)
-  (if ctx
-      (internal-definition-context-introduce ctx stx 'add)
-      stx))
+(define (splice-from-scope stx sc)
+  (unless (syntax? stx)
+    (raise-argument-error
+     'remove-scope
+     "syntax?"
+     stx))
+  (unless (scope? sc)
+    (raise-argument-error
+     'remove-scope
+     "scope?"
+     sc))
+  (internal-definition-context-introduce
+   (scope-def-ctx sc)
+   ((scope-introducer sc) stx 'remove)
+   'remove))
 
 (define (add-ctxs-scopes ctxs stx)
+  (define (add-ctx-scope ctx stx)
+    (if ctx
+        (internal-definition-context-introduce ctx stx 'add)
+        stx))
+  
   (for/fold ([stx stx])
             ([ctx ctxs])
     (add-ctx-scope ctx stx)))
 
-(define (bind! id rhs)
-  (define ctx (current-def-ctx))
-  (unless (internal-definition-context? ctx)
-    (raise-argument-error
-     'bind!
-     "internal-definition-context?"
-     ctx))
+(struct racket-var [])
+
+(define (bind! id rhs-arg)
   (unless (identifier? id)
     (raise-argument-error
      'bind!
      "identifier?"
      id))
-  #;(unless (or (not rhs) (syntax? rhs))
-      (raise-argument-error
-       'bind!
-       "(or/c #f syntax?)"
-       rhs))
+  (unless (current-def-ctx)
+    (error 'bind!
+           "cannot call outside of with-scope"))
 
-  ; TODO: fix bug. should put all current-local-def-ctxs on RHS as well.
-  (syntax-local-bind-syntaxes (list id) #`'#,rhs ctx)
+  (define rhs
+    (if (racket-var? rhs-arg)
+        #f
+        #`'#,rhs-arg))
+  
+  (syntax-local-bind-syntaxes (list id) rhs (current-def-ctx) (current-local-def-ctxs))
   (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) (syntax-local-identifier-as-binding id)))
   (lift-disappeared-bindings! id-in-sc)
   id-in-sc)
+
+(define (eval-transformer stx)
+  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
+  (define id (generate-temporary #'x))
+
+  (syntax-local-bind-syntaxes
+   (list id)
+   (add-ctxs-scopes (current-local-def-ctxs) stx)
+   ctx)
+  
+  (syntax-local-value
+   (internal-definition-context-introduce ctx id 'add)
+   (lambda () (error 'eval-transformer "shouldn't happen"))
+   ctx))
 
 ; used only for eq? equality.
 (define unbound
@@ -164,13 +176,7 @@
     (struct unbound [])
     (unbound)))
 
-(define (lookup id)
-  (define ctx (current-def-ctx))
-  (unless (or (not ctx) (internal-definition-context? ctx))
-    (raise-argument-error
-     'lookup
-     "(or/c #f internal-definition-context?)"
-     ctx))
+(define (lookup id [predicate (lambda (v) #t)])
   (unless (identifier? id)
     (raise-argument-error
      'lookup
@@ -182,87 +188,36 @@
     (syntax-local-value
      id-in-sc
      (lambda () unbound)
-     ctx))
+     (current-def-ctx)))
 
-  (unless (eq? result unbound)
+  (when (and (not (eq? result unbound)) (predicate result))
     (lift-disappeared-uses! id-in-sc))
   
   result)
-
 
 (define (syntax-local-introduce-splice stx)
   (syntax-local-identifier-as-binding
    (syntax-local-introduce stx)))
 
-; Apply as transformer. Perhaps should eventually be added to
-; syntax/apply-transformer?
-
-(struct wrapper (contents))
-
-(define (wrap arg)
-  (if (syntax? arg)
-      arg
-      (wrapper arg)))
-
-(define (unwrap arg)
-  (if (syntax? arg)
-      (let ([e (syntax-e arg)])
-        (if (wrapper? e)
-            (wrapper-contents e)
-            arg))
-      arg))
-
-(define current-def-ctx (make-parameter #f))
-(define current-ctx-id (make-parameter #f))
-(define current-local-def-ctxs (make-parameter '()))
-
 (define (apply-as-transformer f ctx-type-arg . args)
-  (define before (car args))
   (unless (procedure? f)
     (raise-argument-error
      'apply-as-transformer
      "procedure?"
      f))
-
-  (define (single-argument-transformer stx-arg)
-    (define stx (add-ctxs-scopes (current-local-def-ctxs) stx-arg))
-    (define (go)
-      (call-with-values
-       (lambda () (apply f (map unwrap (syntax->list stx))))
-       (lambda vs (datum->syntax #f (map wrap vs)))))
-
-    (case ctx-type-arg
-      [(expression)
-       (parameterize ([current-local-def-ctxs '()])
-         (go))]
-      [(definition)
-       (go)]))
-
-  (define ctx-type
-    (case ctx-type-arg
-      [(expression) 'expression]
-      [(definition)
-       (let ([ctx-id (current-ctx-id)])
-         #;(unless ctx-id
-             (error 'apply-as-transformer "cannot call definition-context expander outside of define/hygienic"))
-         (if ctx-id (list ctx-id) (syntax-local-context)))]))
+  (unless (member ctx-type-arg '(expression definition))
+    (raise-argument-error
+     'apply-as-transformer
+     "(or/c 'expression 'definition)"
+     ctx-type-arg))
   
-  (define ctx (current-def-ctx))
-  (define res
-    (local-apply-transformer
-     single-argument-transformer
-     (datum->syntax #f (map wrap args))
-     ctx-type
-     (cond
-       [(internal-definition-context? ctx) (list ctx)]
-       [(list? ctx) ctx]
-       [(not ctx) '()]
-       [else (raise-argument-error
-              'apply-as-transformer
-              "(or/c internal-definition-context? (listof internal-definition-context?) #f)"
-              ctx)])))
-  (define after (car (map unwrap (syntax->list res))))
-  (apply values (map unwrap (syntax->list res))))
+  (apply prim-apply-as-transformer
+         f
+         (case ctx-type-arg
+           [(expression) 'expression]
+           [(definition) (list (current-ctx-id))])
+         (current-local-def-ctxs)
+         args))
 
 (begin-for-syntax
   (define-syntax-class ctx-type
@@ -295,15 +250,6 @@
              [(_ t)
               (apply-as-transformer tmp ctx.type #'t)])))]))
 
-(define-syntax generic+rep
-  (syntax-parser
-    #:literals (define)
-    [(_ name
-        (fields)
-        (define header . body) ...)
-     #'(begin
-         (define-generics name))]))
-
 ; applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function
 ; is applied to the syntax object but not its immediate datum contents.
@@ -335,9 +281,3 @@
     (define/public (compiled-name id)
       (syntax-local-introduce
        (free-id-table-ref table (syntax-local-introduce id))))))
-
-(define (eval-transformer stx)
-  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
-  (define id (generate-temporary #'x))
-  (syntax-local-bind-syntaxes (list id) (add-ctxs-scopes (current-local-def-ctxs) stx) ctx)
-  (syntax-local-value (internal-definition-context-introduce ctx id 'add) (lambda () (error 'eval-transformer "shouldn't happen")) ctx))

@@ -1,6 +1,6 @@
 #lang racket
 
-(require ee-lib/define (for-syntax syntax/parse ee-lib))
+(require "../define.rkt" (for-syntax syntax/parse "../main.rkt"))
 
 (define-literal-forms ph-literals
   "can only be used in phone-numbers syntax"

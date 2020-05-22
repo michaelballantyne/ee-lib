@@ -4,14 +4,39 @@
   json
   racket/list
   racket/system
-  ee-lib/define
+  racket/string
+  "../define.rkt"
   (for-syntax
    racket/base
    racket/generic
-   ee-lib
+   "../main.rkt"
    syntax/stx
    syntax/id-table
    (rename-in syntax/parse [define/syntax-parse def/stx])))
+
+(provide js
+         #%js-var
+         #%js-datum
+         #%js-app
+         ?
+         function
+         set!
+         +
+         *
+         -
+         /
+         <
+         <=
+         >
+         >=
+         ==
+
+         let
+         let-syntax
+         return
+         while
+         if
+         letrec-syntax)
 
 (define-literal-forms js-literals
   "Javascript forms cannot be used directly as Racket expressions"
@@ -36,6 +61,7 @@
    return
    while
    if
+   letrec-syntax
    ))
 
 (begin-for-syntax
@@ -50,7 +76,7 @@
        ((js-macro-rep-transformer js-macro) stx))])
 
   (define (bind-var! name)
-    (bind! name #'(js-variable-binding-rep)))
+    (bind! name (js-variable-binding-rep)))
 
   (define-syntax-class binop
     #:literal-sets (js-literals)
@@ -79,6 +105,13 @@
          (def/stx (body^ ...)
            (expand-block (add-scope #'(body ...) sc)))
          (qstx/rc (function (x^ ...) body^ ...)))]
+      [(letrec-syntax ([x:id rhs] ...)
+         body)
+       (with-scope sc
+         (for ([x (syntax->list #'(x ...))]
+               [rhs (syntax->list #'(rhs ...))])
+           (bind! (add-scope x sc) (js-macro-rep (eval-transformer (add-scope rhs sc)))))
+         (js-expand-expression (add-scope #'body sc)))]
       [(#%js-app e e* ...)
        (qstx/rc (#%js-app #,(js-expand-expression #'e)
                           #,@(stx-map js-expand-expression #'(e* ...))))]
@@ -120,7 +153,7 @@
        (def/stx x^ (bind-var! #'x))
        (qstx/rc (let x^ e))]
       [(let-syntax m:id e)
-       (def/stx m^ (bind! #'m #'(js-macro-rep e)))
+       (def/stx m^ (bind! #'m (js-macro-rep (eval-transformer #'e))))
        #'(let-syntax m^ e)]
       [(return e) this-syntax]
       [(while condition body ...) this-syntax]
@@ -268,25 +301,24 @@
                     body))))
 
 (define (runjs estree)
+  (define out (open-output-string))
+  (define err (open-output-string))
   (define f (fifth (process*/ports
-                    (current-output-port)
+                    out
                     (open-input-string (jsexpr->string estree))
-                    (current-error-port)
+                    err
                     (find-executable-path "node")
                     "runjs.js")))
   (f 'wait)
-  (void))
+  (displayln (get-output-string err))
+  (string-trim (get-output-string out)))
 
 (define-syntax js
   (syntax-parser
     [(_ arg)
-     (ee-lib-boundary
-      (def/stx expanded-js (js-expand-expression #'arg))
-      (def/stx extracted (do-extract #'expanded-js))
-      #'(begin
-          (define wrapped (hash 'type "ExpressionStatement" 'expression 'extracted))
-          ;(pretty-display wrapped)
-          (runjs wrapped)))]))
+     (def/stx expanded-js (js-expand-expression #'arg))
+     (def/stx extracted (do-extract #'expanded-js))
+     #'(runjs (hash 'type "ExpressionStatement" 'expression 'extracted))]))
 
 (define-syntax-rule
   (define-js-macro name e)
@@ -312,58 +344,87 @@
 
 
 (module+ test
-  (js ((function (n)
-                 (return n))))
-  (js ((function ()
-                 (let factorial (function (n)
-                                          5 ; expressions are allowed in statement position
-                                          (if (<= n 1)
-                                              ((return 1))
-                                              ((return (* n (factorial (- n 1))))))))
-                 (return (factorial 5)))))
-  ; Thought this was broken due to expander bug, but doesn't seem to be...
-  #;(js ((function ()
-                   (defn (factorial n)
-                     (return (? (<= n 1) 1 (* n (factorial (- n 1))))))
-                   (return (factorial 5)))))
+  (require rackunit)
+
+  (check-equal?
+   (js ((function (n)
+                  (return n)) 5))
+   "5")
+
+  (check-equal?
+   (js ((function ()
+                  (let factorial (function (n)
+                                           5 ; expressions are allowed in statement position
+                                           (if (<= n 1)
+                                               ((return 1))
+                                               ((return (* n (factorial (- n 1))))))))
+                  (return (factorial 5)))))
+   "120")
   
+  ; Thought this was broken due to expander bug, but doesn't seem to be...
+  (check-equal?
+   (js ((function ()
+                  (defn (factorial n)
+                    (return (? (<= n 1) 1 (* n (factorial (- n 1))))))
+                  (return (factorial 5)))))
+   "120")
+  
+  (check-equal?
+   (js ((function ()
+                  (let factorial (function (n)
+                                           (let i 1)
+                                           (let res 1)
+                                           (while (<= i n)
+                                                  (set! res (* res i))
+                                                  (inc! i))
+                                           (return res)))
+                  (return (factorial 5)))))
+   "120")
 
-  (js ((function ()
-                 (let factorial (function (n)
-                                          (let i 1)
-                                          (let res 1)
-                                          (while (<= i n)
-                                                 (set! res (* res i))
-                                                 (inc! i))
-                                          (return res)))
-                 (return (factorial 5)))))
-
-  (js ((function ()
-                 (let fib (function (n)
-                                    (return
-                                     (cond
-                                       [(== n 1) 1]
-                                       [(== n 2) 1]
-                                       [else (+ (fib (- n 1)) (fib (- n 2)))]))))
-                 (return (fib 6)))))
+  (check-equal?
+   (js ((function ()
+                  (let fib (function (n)
+                                     (return
+                                      (cond
+                                        [(== n 1) 1]
+                                        [(== n 2) 1]
+                                        [else (+ (fib (- n 1)) (fib (- n 2)))]))))
+                  (return (fib 6)))))
+   "8")
 
   ; A macro defined inside the langauge. Also a use-site binder test.
-  (js ((function ()
-                 (let x 5)
-                 (let-syntax m (lambda (stx)
-                                 (syntax-parse stx
-                                   [(_ arg)
-                                    #'((function (arg) (return x)) 6)])))
-                 (return (m x)))))
+  (check-equal?
+   (js ((function ()
+                  (let x 5)
+                  (let-syntax m (lambda (stx)
+                                  (syntax-parse stx
+                                    [(_ arg)
+                                     #'((function (arg) (return x)) 6)])))
+                  (return (m x)))))
+   "5")
 
-  ; Same as previous, but at statement rather than expression position.
-  (js ((function ()
-                 (let x 5)
-                 (let-syntax m (lambda (stx)
-                                 (syntax-parse stx
-                                   [(_ arg)
-                                    #'(return ((function (arg) (return x)) 6))])))
-                 (inc! x)
-                 (m x))))
+  ; Same as previous, but at statement rather than expression position, plus inc!
+  (check-equal?
+   (js ((function ()
+                  (let x 5)
+                  (let-syntax m (lambda (stx)
+                                  (syntax-parse stx
+                                    [(_ arg)
+                                     #'(return ((function (arg) (return x)) 6))])))
+                  (inc! x)
+                  (m x))))
+   "6")
+
+  ; use-site scope test for something entirely in an expression context
+  (check-equal?
+   (js ((function ()
+                  (let x 5)
+                  (return
+                   (letrec-syntax ([m (lambda (stx)
+                                        (syntax-parse stx
+                                          [(_ arg)
+                                           #'((function (arg) (return x)) 6)]))])
+                     (m x))))))
+   "5")
   
   )

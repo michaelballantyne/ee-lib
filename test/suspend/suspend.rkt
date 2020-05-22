@@ -3,11 +3,11 @@
 (provide boundary myrkt mycons mylanglet)
 
 (require
-  ee-lib/define
+  "../../define.rkt"
   (for-syntax
    racket
    (rename-in syntax/parse [define/syntax-parse def/stx])
-   ee-lib))
+   "../../main.rkt"))
 
 (define-literal-forms
   mylang-literals
@@ -22,7 +22,7 @@
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
        (with-scope s
-         (def/stx x^ (bind! (add-scope #'v s) #'(mylangbinding)))
+         (def/stx x^ (bind! (add-scope #'v s) (mylangbinding)))
          (def/stx b^ (my-expand (add-scope #'b s)))
          (qstx/rc (mylanglet x^ b^)))]
       [(mycons e1 e2)
@@ -63,8 +63,8 @@
     [(_ e ctx)
      (displayln 'inresumption)
      (define res 
-     (local-expand #'e 'expression '() (list (syntax-local-make-definition-context)
-                                             (syntax->datum #'ctx))))
+       (local-expand #'e 'expression '() (list (syntax-local-make-definition-context)
+                                               (syntax->datum #'ctx))))
      (displayln 'resumptionres)
      (displayln res)
      res
@@ -74,11 +74,10 @@
 (define-syntax (boundary stx)
   (syntax-parse stx
     [(_ e)
-     (ee-lib-boundary
-      (define e^ (my-expand #'e))
-      (displayln e^)
-      (define e^^ (my-compile e^))
-      (displayln 'boundarycompiled)
-      (displayln e^^)
-      e^^)]))
+     (define e^ (my-expand #'e))
+     (displayln e^)
+     (define e^^ (my-compile e^))
+     (displayln 'boundarycompiled)
+     (displayln e^^)
+     e^^]))
 

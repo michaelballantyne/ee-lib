@@ -6,6 +6,7 @@
   syntax/parse
   racket/class
   syntax/id-table
+  (for-template "lift-disappeared.rkt")
   (for-syntax
    racket/base
    syntax/parse
@@ -17,11 +18,7 @@
 (provide
  qstx/rc ; read as quasisyntax/loc+props
  qstx/lp
- 
- ee-lib-boundary
- record-disappeared-bindings
 
- 
  bind!
  with-scope
  scope?
@@ -36,6 +33,8 @@
  current-def-ctx
  current-ctx-id
  current-local-def-ctxs
+
+ eval-transformer
 
  map-transform
  syntax-local-introduce-splice
@@ -55,47 +54,6 @@
      #`(datum->syntax (quote-syntax #,stx)
                       (syntax-e (quasisyntax template))
                       this-syntax this-syntax)]))
-
-; racket/syntax currently has tools for disappeared uses,
-; but not disappeared bindings. This is a copy-paste-and-modify job
-; that should be integrated into a future release of that collection.
-  
-(define current-recorded-disappeared-bindings (make-parameter #f))
-
-(define (record-disappeared-bindings ids)
-  (cond
-    [(identifier? ids) (record-disappeared-bindings (list ids))]
-    [(and (list? ids) (andmap identifier? ids))
-     (let ([uses (current-recorded-disappeared-bindings)])
-       (when uses
-         (current-recorded-disappeared-bindings 
-          (append
-           (if (syntax-transforming?)
-               (map syntax-local-introduce ids)
-               ids)
-           uses))))]
-    [else (raise-argument-error 'record-disappeared-bindings
-                                "(or/c identifier? (listof identifier?))"
-                                ids)]))
-
-(define-syntax-rule (with-disappeared-bindings body-expr ... stx-expr)
-  (let-values ([(stx disappeared-bindings)
-                (parameterize ((current-recorded-disappeared-bindings null))
-                  (let ([result (let () body-expr ... stx-expr)])
-                    (values result (current-recorded-disappeared-bindings))))])
-    (syntax-property stx
-                     'disappeared-binding
-                     (append (or (syntax-property stx 'disappeared-binding) null)
-                             disappeared-bindings))))
-
-(define-syntax-rule (ee-lib-boundary body-expr ... stx-expr)
-  (with-disappeared-uses
-      (with-disappeared-bindings
-          (let ([ctx (syntax-local-make-definition-context #f)])
-            (parameterize ([current-def-ctx ctx]
-                           [current-local-def-ctxs (cons ctx (current-local-def-ctxs))]
-                           [current-ctx-id (gensym 'apply-as-transformer-ctx)])
-              body-expr ... stx-expr)))))
 
 
 ; Light wrappers around the scope and definition context APIs for convenience
@@ -188,15 +146,16 @@
      'bind!
      "identifier?"
      id))
-  (unless (or (not rhs) (syntax? rhs))
-    (raise-argument-error
-     'bind!
-     "(or/c #f syntax?)"
-     rhs))
-  
-  (syntax-local-bind-syntaxes (list id) rhs ctx)
+  #;(unless (or (not rhs) (syntax? rhs))
+      (raise-argument-error
+       'bind!
+       "(or/c #f syntax?)"
+       rhs))
+
+  ; TODO: fix bug. should put all current-local-def-ctxs on RHS as well.
+  (syntax-local-bind-syntaxes (list id) #`'#,rhs ctx)
   (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) (syntax-local-identifier-as-binding id)))
-  (record-disappeared-bindings id-in-sc)
+  (lift-disappeared-bindings! id-in-sc)
   id-in-sc)
 
 ; used only for eq? equality.
@@ -219,7 +178,6 @@
      id))
   
   (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) id))
-  #;(displayln (syntax-debug-info (syntax-local-introduce id-in-sc)))
   (define result
     (syntax-local-value
      id-in-sc
@@ -227,7 +185,7 @@
      ctx))
 
   (unless (eq? result unbound)
-    (record-disappeared-uses id-in-sc))
+    (lift-disappeared-uses! id-in-sc))
   
   result)
 
@@ -377,3 +335,9 @@
     (define/public (compiled-name id)
       (syntax-local-introduce
        (free-id-table-ref table (syntax-local-introduce id))))))
+
+(define (eval-transformer stx)
+  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
+  (define id (generate-temporary #'x))
+  (syntax-local-bind-syntaxes (list id) (add-ctxs-scopes (current-local-def-ctxs) stx) ctx)
+  (syntax-local-value (internal-definition-context-introduce ctx id 'add) (lambda () (error 'eval-transformer "shouldn't happen")) ctx))

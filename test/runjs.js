@@ -25,7 +25,7 @@ function eval_module(text) {
 read_stdin()
   .then(function(res) {
     const program = escodegen.generate(JSON.parse(res));
-    process.stdout.write(program + "\n")
+    process.stderr.write(program + "\n")
     console.log(eval_module(program))
   })
 

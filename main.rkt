@@ -6,7 +6,6 @@
   syntax/parse
   syntax/parse/define
 
-  racket/class
   syntax/id-table
   (rename-in "private/apply-as-transformer.rkt"
              [apply-as-transformer prim-apply-as-transformer])
@@ -15,7 +14,6 @@
    racket/base
    syntax/parse
    racket/syntax
-   syntax/transformer
    (only-in syntax/parse [define/syntax-parse def/stx]))
   (for-template racket/base))
 
@@ -43,7 +41,7 @@
 
  map-transform
  syntax-local-introduce-splice
- fresh-symbol-table%)
+ add-fresh-name!)
 
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()
@@ -236,6 +234,9 @@
          (define (name arg ...)
            (apply-as-transformer tmp ctx.type arg ...)))]))
 
+
+; Not sure what this was for...
+#|
 (require syntax/parse/experimental/template)
 (provide define/hygienic-metafunction)
 (define-syntax define/hygienic-metafunction
@@ -249,6 +250,7 @@
            (syntax-parse stx
              [(_ t)
               (apply-as-transformer tmp ctx.type #'t)])))]))
+|#
 
 ; applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function
@@ -267,17 +269,23 @@
       [else stx]))
   (f (recur stx)))
 
-(define fresh-symbol-table%
-  (class object%
-    (super-new)
-    (field [table (make-free-id-table)])
+(define (add-fresh-name! table id)
+  (unless (mutable-free-id-table? table)
+    (raise-argument-error
+     'add-fresh-name!
+     "mutable-free-id-table?"
+     table))
+  (unless (identifier? id)
+    (raise-argument-error
+     'add-fresh-name!
+     "identifier?"
+     id))
+    
+  (define result (generate-temporary id))
 
-    (define/public (compile-name! id)
-      (let ([result (generate-temporary id)])
-        (free-id-table-set! table (syntax-local-introduce id) result)
-        (syntax-local-introduce
-         result)))
-
-    (define/public (compiled-name id)
-      (syntax-local-introduce
-       (free-id-table-ref table (syntax-local-introduce id))))))
+  (free-id-table-set! table
+                      (syntax-local-introduce id)
+                      result)
+  
+  (syntax-local-introduce
+   result))

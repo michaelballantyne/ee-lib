@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require syntax/apply-transformer)
+(require "hacked-local-apply-trans.rkt")
 
 (provide
  ; Version of apply-as-transformer with a `local-expand`-like API.
@@ -35,3 +35,4 @@
      ctxs))
 
   (apply values (map unwrap (syntax->list res))))
+

@@ -35,7 +35,6 @@
  define/hygienic
  current-def-ctx
  current-ctx-id
- current-local-def-ctxs
 
  eval-transformer
 
@@ -61,7 +60,6 @@
 
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
-(define current-local-def-ctxs (make-parameter '()))
 
 (struct scope [introducer def-ctx])
 
@@ -69,7 +67,6 @@
   (let* ([ctx (syntax-local-make-definition-context (current-def-ctx))]
          [sc (scope (make-syntax-introducer #t) ctx)])
     (parameterize ([current-def-ctx (scope-def-ctx sc)]
-                   [current-local-def-ctxs (cons (scope-def-ctx sc) (current-local-def-ctxs))]
                    [current-ctx-id (gensym 'with-scope-ctx)])
       (p sc))))
 
@@ -88,7 +85,9 @@
      'add-scope
      "scope?"
      sc))
-  ((scope-introducer sc) stx 'add))
+  (internal-definition-context-introduce
+    (scope-def-ctx sc)
+    ((scope-introducer sc) stx 'add) 'add))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)
@@ -122,15 +121,10 @@
    ((scope-introducer sc) stx 'remove)
    'remove))
 
-(define (add-ctxs-scopes ctxs stx)
-  (define (add-ctx-scope ctx stx)
-    (if ctx
-        (internal-definition-context-introduce ctx stx 'add)
-        stx))
-  
-  (for/fold ([stx stx])
-            ([ctx ctxs])
-    (add-ctx-scope ctx stx)))
+(define (add-ctx-scope ctx stx)
+  (if ctx
+    (internal-definition-context-introduce ctx stx 'add)
+    stx))
 
 (struct racket-var [])
 
@@ -149,8 +143,8 @@
         #f
         #`'#,rhs-arg))
   
-  (syntax-local-bind-syntaxes (list id) rhs (current-def-ctx) (current-local-def-ctxs))
-  (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) (syntax-local-identifier-as-binding id)))
+  (syntax-local-bind-syntaxes (list id) rhs (current-def-ctx))
+  (define id-in-sc (add-ctx-scope (current-def-ctx) (syntax-local-identifier-as-binding id)))
   (lift-disappeared-bindings! id-in-sc)
   id-in-sc)
 
@@ -160,7 +154,7 @@
 
   (syntax-local-bind-syntaxes
    (list id)
-   (add-ctxs-scopes (current-local-def-ctxs) stx)
+   (add-ctx-scope (current-def-ctx) stx)
    ctx)
   
   (syntax-local-value
@@ -181,7 +175,7 @@
      "identifier?"
      id))
   
-  (define id-in-sc (add-ctxs-scopes (current-local-def-ctxs) id))
+  (define id-in-sc (add-ctx-scope (current-def-ctx) id))
   (define result
     (syntax-local-value
      id-in-sc
@@ -214,7 +208,7 @@
          (case ctx-type-arg
            [(expression) 'expression]
            [(definition) (list (current-ctx-id))])
-         (current-local-def-ctxs)
+         (if (current-def-ctx) (list (current-def-ctx)) '())
          args))
 
 (begin-for-syntax

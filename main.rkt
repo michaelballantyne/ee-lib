@@ -33,6 +33,7 @@
  lookup
  apply-as-transformer
  define/hygienic
+ define/hygienic-metafunction
  current-def-ctx
  current-ctx-id
 
@@ -228,9 +229,7 @@
          (define (name arg ...)
            (apply-as-transformer tmp ctx.type arg ...)))]))
 
-
-; Not sure what this was for...
-#|
+; convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)
 (provide define/hygienic-metafunction)
 (define-syntax define/hygienic-metafunction
@@ -244,7 +243,6 @@
            (syntax-parse stx
              [(_ t)
               (apply-as-transformer tmp ctx.type #'t)])))]))
-|#
 
 ; applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function

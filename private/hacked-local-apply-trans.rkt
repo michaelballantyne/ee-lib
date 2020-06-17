@@ -60,7 +60,13 @@
      #`(quote #,(lambda (stx)
                   (syntax-case stx ()
                     [(_ arg)
-                     (local-expand #`(#%expression (#,(syntax-local-introduce neutral-transformer-id) #,#'arg))
+                     ; Continued workaround for https://github.com/racket/racket/pull/2237:
+                     ; Force an expression context; with Racket's current bug this will set the
+                     ; use-site field to #f. That will then trigger nested definition context
+                     ; expansions to make a new def-ctx. Would not work for traditional interpreter
+                     ; -like use of definition contexts, but does work when the bind! happens
+                     ; inside the local expansion.
+                     (local-expand #`(#,(syntax-local-introduce neutral-transformer-id) #,#'arg)
                                    'expression
                                    '()
                                    intdef-ctxs*)])))
@@ -68,11 +74,10 @@
     
     (define expanded
       (if (eq? context 'expression)
+          ; Expand as a definition first to get a use-site scope, as a workaround for
+          ; https://github.com/racket/racket/pull/2237
           (local-expand #`(#,exprhack-id #,stx) (list (gensym)) '() intdef-ctxs*)
           (local-expand #`(#,transformer-id #,stx) context '() intdef-ctxs*)))
 
-    (if (eq? context 'expression)
-        (syntax-case expanded (quote #%expression)
-          [(#%expression (quote form)) #'form])    
-        (syntax-case expanded (quote)
-          [(quote form) #'form]))))
+    (syntax-case expanded (quote)
+      [(quote form) #'form])))

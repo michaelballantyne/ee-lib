@@ -426,5 +426,19 @@
                                            #'((function (arg) (return x)) 6)]))])
                      (m x))))))
    "5")
-  
-  )
+
+  (check-equal?
+   (js ((function ()
+                  (let-syntax my-let (syntax-parser
+                                       [(_ v rhs)
+                                        #'(let v rhs)]))
+                  ; I expected surrounding context to be local-expand 'expression
+                  ; and not record the use-site scope from this expansion.
+                  ; Or... this expansion is occuring within a define/hygienic
+                  ; #:definition call, so we're already in a new definition context.
+                  ; And the re-expansion is actually in a child of that same context.
+                  ; Wouldn't work if we weren't using define/hygienic everywhere.
+                  (my-let x 5)
+                  (return x))))
+   "5"))
+                                       

@@ -183,10 +183,11 @@
      (lambda () unbound)
      (current-def-ctx)))
 
-  (when (and (not (eq? result unbound)) (predicate result))
-    (lift-disappeared-uses! id-in-sc))
-  
-  result)
+  (if (and (not (eq? result unbound)) (predicate result))
+      (begin
+        (lift-disappeared-uses! id-in-sc)
+        result)
+      unbound))
 
 (define (syntax-local-introduce-splice stx)
   (syntax-local-identifier-as-binding

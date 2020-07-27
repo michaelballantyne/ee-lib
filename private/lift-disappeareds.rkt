@@ -14,7 +14,7 @@
 
   (define (ensure-module-end!)
     (when (not lifted?)
-      (syntax-local-lift-module-end-declaration #'(emit-lifteds)))
+      (syntax-local-lift-expression #'(emit-lifteds)))
     (set! lifted? #t))
 
   (define (adjust-id-for-lift id)

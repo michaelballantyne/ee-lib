@@ -41,7 +41,11 @@
 
  map-transform
  syntax-local-introduce-splice
- add-fresh-name!)
+ add-fresh-name!
+
+ module-macro
+ expression-macro
+ )
 
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()
@@ -282,3 +286,16 @@
   
   (syntax-local-introduce
    result))
+
+(define (module-macro t)
+  (lambda (stx)
+    (case (syntax-local-context)
+      [(module-begin) #`(begin #,stx)]
+      [(module) (t stx)]
+      [else (raise-syntax-error #f "Only allowed in module context" stx)])))
+
+(define (expression-macro t)
+  (lambda (stx)
+    (case (syntax-local-context)
+      [(expression) (t stx)]
+      [else #`(#%expression #,stx)])))

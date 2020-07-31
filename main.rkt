@@ -134,10 +134,10 @@
 (struct racket-var [])
 
 (define (bind! id rhs-arg)
-  (unless (identifier? id)
+  (unless (or (identifier? id) (and (list? id) (andmap identifier? id)))
     (raise-argument-error
      'bind!
-     "identifier?"
+     "(or/c identifier? (listof identifier?))"
      id))
   (unless (current-def-ctx)
     (error 'bind!
@@ -147,10 +147,14 @@
     (if (racket-var? rhs-arg)
         #f
         #`'#,rhs-arg))
-  
-  (syntax-local-bind-syntaxes (list id) rhs (current-def-ctx))
-  (define id-in-sc (add-ctx-scope (current-def-ctx) (syntax-local-identifier-as-binding id)))
-  (lift-disappeared-bindings! id-in-sc)
+
+  (syntax-local-bind-syntaxes (if (list? id) id (list id)) rhs (current-def-ctx))
+
+  (define (in-sc id)
+    (add-ctx-scope (current-def-ctx) (syntax-local-identifier-as-binding id)))
+
+  (define id-in-sc (if (list? id) (map in-sc id) (in-sc id)))
+  (apply lift-disappeared-bindings! (if (list? id-in-sc) id-in-sc (list id-in-sc)))
   id-in-sc)
 
 (define (eval-transformer stx)

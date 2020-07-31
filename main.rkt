@@ -44,7 +44,9 @@
  add-fresh-name!
 
  module-macro
+ non-module-begin-macro
  expression-macro
+ definition-macro
  )
 
 (define-syntax (qstx/lp stx)
@@ -297,6 +299,19 @@
       [(module-begin) #`(begin #,stx)]
       [(module) (t stx)]
       [else (raise-syntax-error #f "Only allowed in module context" stx)])))
+
+(define (non-module-begin-macro t)
+  (lambda (stx)
+    (case (syntax-local-context)
+      [(module-begin) #`(begin #,stx)]
+      [else (t stx)])))
+
+(define (definition-macro t)
+  (lambda (stx)
+    (case (syntax-local-context)
+      [(module-begin) #`(begin #,stx)]
+      [(expression) (raise-syntax-error #f "Only allowed in a definition context" stx)]
+      [else (t stx)])))
 
 (define (expression-macro t)
   (lambda (stx)

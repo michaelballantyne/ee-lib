@@ -45,15 +45,15 @@
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
        (def/stx v^ (add-fresh-name! symtable #'v))
-       (displayln 'compiled-binding)
-       (displayln (syntax-debug-info #'v^ (syntax-local-phase-level) #t))
+       ;(displayln 'compiled-binding)
+       ;(displayln (syntax-debug-info #'v^ (syntax-local-phase-level) #t))
        #`(let ([v^ 'v]) #,(my-compile #'b))]
       [(mycons e1 e2)
        #`(cons #,(my-compile #'e1) #,(my-compile #'e2))]
       [x:id
        (define res (syntax-local-get-shadower (free-id-table-ref symtable #'x) #t))
-       (displayln 'compiled-ref)
-       (displayln (syntax-debug-info res (syntax-local-phase-level) #t))
+       ;(displayln 'compiled-ref)
+       ;(displayln (syntax-debug-info res (syntax-local-phase-level) #t))
        res]
       [(myrkt e ctx)
        #'(resumption e ctx)]
@@ -62,12 +62,12 @@
 (define-syntax (resumption stx)
   (syntax-parse stx
     [(_ e ctx)
-     (displayln 'inresumption)
+     ;(displayln 'inresumption)
      (define res 
        (local-expand #'e 'expression '() (list (syntax-local-make-definition-context)
                                                (syntax->datum #'ctx))))
-     (displayln 'resumptionres)
-     (displayln res)
+     ;(displayln 'resumptionres)
+     ;(displayln res)
      res
      ])
   )
@@ -76,9 +76,9 @@
   (syntax-parse stx
     [(_ e)
      (define e^ (my-expand #'e))
-     (displayln e^)
+     ;(displayln e^)
      (define e^^ (my-compile e^))
-     (displayln 'boundarycompiled)
-     (displayln e^^)
+     ;(displayln 'boundarycompiled)
+     ;(displayln e^^)
      e^^]))
 

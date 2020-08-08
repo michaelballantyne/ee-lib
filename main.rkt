@@ -29,7 +29,6 @@
  add-scope
  splice-from-scope
  add-scopes
- unbound
  lookup
  apply-as-transformer
  define/hygienic
@@ -145,6 +144,9 @@
     (error 'bind!
            "cannot call outside of with-scope"))
 
+  (when (not rhs-arg)
+    (error 'bind! "environment value must not be #f"))
+
   (define rhs
     (if (racket-var? rhs-arg)
         #f
@@ -185,7 +187,7 @@
      'lookup
      "identifier?"
      id))
-  
+
   (define id-in-sc (add-ctx-scope (current-def-ctx) id))
   (define result
     (syntax-local-value
@@ -193,11 +195,14 @@
      (lambda () unbound)
      (current-def-ctx)))
 
+  (when (not result)
+    (error 'lookup "invariant violated; got #f from environment lookup"))
+
   (if (and (not (eq? result unbound)) (predicate result))
       (begin
         (lift-disappeared-uses! id-in-sc)
         result)
-      unbound))
+      #f))
 
 (define (syntax-local-introduce-splice stx)
   (syntax-local-identifier-as-binding

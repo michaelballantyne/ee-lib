@@ -162,8 +162,10 @@
   (apply lift-disappeared-bindings! (if (list? id-in-sc) id-in-sc (list id-in-sc)))
   id-in-sc)
 
+; This should use syntax-local-eval, but that's currently buggy. Re-implement
+; correct version here for now.
 (define (eval-transformer stx)
-  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
+  (define ctx (syntax-local-make-definition-context))
   (define id (generate-temporary #'x))
 
   (syntax-local-bind-syntaxes

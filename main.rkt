@@ -23,6 +23,7 @@
 
  bind!
  racket-var
+ racket-var?
  with-scope
  scope?
  scope-introducer
@@ -237,7 +238,7 @@
 
 (define-syntax define/hygienic
   (syntax-parser
-    [(_ (name arg ...) ctx:ctx-type
+    [(_ (name:id arg:id ...) ctx:ctx-type
         body ...+)
      #'(begin
          (define (tmp arg ...)
@@ -250,7 +251,7 @@
 (provide define/hygienic-metafunction)
 (define-syntax define/hygienic-metafunction
   (syntax-parser
-    [(_ (name arg) ctx:ctx-type
+    [(_ (name:id arg:id) ctx:ctx-type
         body ...)
      #'(begin
          (define (tmp arg)

@@ -162,17 +162,18 @@
   (apply lift-disappeared-bindings! (if (list? id-in-sc) id-in-sc (list id-in-sc)))
   id-in-sc)
 
-; This should use syntax-local-eval, but that's currently buggy. Re-implement
-; correct version here for now.
+; This should use syntax-local-eval, but that's currently buggy.
+; Change to use syntax-local-eval after my fix gets in a release:
+; https://github.com/racket/racket/pull/3517
 (define (eval-transformer stx)
-  (define ctx (syntax-local-make-definition-context))
+  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
   (define id (generate-temporary #'x))
 
   (syntax-local-bind-syntaxes
    (list id)
    (add-ctx-scope (current-def-ctx) stx)
    ctx)
-  
+
   (syntax-local-value
    (internal-definition-context-introduce ctx id 'add)
    (lambda () (error 'eval-transformer "shouldn't happen"))
@@ -279,6 +280,8 @@
       ; TODO: handle vectors and other composite data that may appear in syntax
       [else stx]))
   (f (recur stx)))
+
+; Do I use this? Should it be a persistent-id-table operation instead?
 
 (define (add-fresh-name! table id)
   (unless (mutable-free-id-table? table)

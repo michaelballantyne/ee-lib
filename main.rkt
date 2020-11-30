@@ -141,10 +141,12 @@
      'bind!
      "(or/c identifier? (listof identifier?))"
      id))
+  (unless (current-ctx-id)
+    (error 'bind!
+           "cannot bind outside of dynamic extent of with-scope"))
   (unless (current-def-ctx)
     (error 'bind!
-           "cannot call outside of with-scope"))
-
+           "cannot bind in outer scope from an expression context"))
   (when (not rhs-arg)
     (error 'bind! "environment value must not be #f"))
 
@@ -223,21 +225,28 @@
      'apply-as-transformer
      "(or/c 'expression 'definition)"
      ctx-type-arg))
-  
-  (apply prim-apply-as-transformer
-         f
-         (case ctx-type-arg
-           [(expression) 'expression]
-           [(definition) (list (current-ctx-id))])
-         (if (current-def-ctx) (list (current-def-ctx)) '())
-         args))
+
+  (apply-with-hygiene f ctx-type-arg #t args))
+
+(define (apply-with-hygiene f ctx-type seal? args)
+  (define def-ctx (current-def-ctx))
+  (parameterize ([current-def-ctx (if seal? #f (current-def-ctx))])
+    (apply prim-apply-as-transformer
+           f
+           (case ctx-type
+             [(expression) 'expression]
+             [(definition) (list (current-ctx-id))])
+           (if def-ctx (list def-ctx) '())
+           args)))
 
 (begin-for-syntax
   (define-syntax-class ctx-type
     (pattern #:expression
-             #:attr type #''expression)
+             #:attr type #''expression
+             #:attr seal? #'#t)
     (pattern #:definition
-             #:attr type #''definition)))
+             #:attr type #''definition
+             #:attr seal? #'#f)))
 
 (define-syntax define/hygienic
   (syntax-parser
@@ -247,7 +256,7 @@
          (define (tmp arg ...)
            body ...)
          (define (name arg ...)
-           (apply-as-transformer tmp ctx.type arg ...)))]))
+           (apply-with-hygiene tmp ctx.type ctx.seal? (list arg ...))))]))
 
 ; convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)

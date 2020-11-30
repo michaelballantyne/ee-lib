@@ -17,8 +17,10 @@
 
 (begin-for-syntax
   (struct mylangbinding [])
-  
-  (define/hygienic (my-expand stx) #:expression
+
+  ; new sealing behavior breaks this hacky suspension impl, so use
+  ; #:definition to avoid. (Wrong use-site hygiene for the moment, of course)
+  (define/hygienic (my-expand stx) #:definition
     (syntax-parse stx
       #:literal-sets (mylang-literals)
       [(mylanglet v b)

@@ -9,6 +9,8 @@
 @(require (for-label ee-lib))
 @defmodule[ee-lib]
 
+Import at phase 1.
+
 @subsection{Scope}
 
 @defform[(with-scope id body ...)]{
@@ -73,9 +75,11 @@ TODO
 
 @subsection{Integrating with Racket}
 
+
 @defproc[(racket-var) racket-var?]{
 TODO
 }
+
 
 @defproc[(current-def-ctx) internal-definition-context?]{
 TODO
@@ -85,20 +89,43 @@ TODO
 TODO
 }
 
+@;{ Seems like these belong elsewhere. They're unrelated to my API.
+
+@defproc[(expression-macro [transformer (-> syntax? syntax?)]) (-> syntax? syntax?)]{
+TODO
+}
+
+@defproc[(definition-macro [transformer (-> syntax? syntax?)]) (-> syntax? syntax?)]{
+TODO
+}
+
+@defproc[(module-macro [transformer (-> syntax? syntax?)]) (-> syntax? syntax?)]{
+TODO
+}
+
+@defproc[(non-module-begin-macro [transformer (-> syntax? syntax?)]) (-> syntax? syntax?)]{
+TODO
+}
+;}
+
 @subsection{Preserving source locations}
 
 @defform[(qstx/rc template)]{
 TODO
 }
 
+@;{ Do I use this?
+
 @defform[(qstx/lp orig template)]{
 TODO
 }
+;}
 
 @section{Defining literals and categories of macros}
 @(require (for-label ee-lib/define))
 @defmodule[ee-lib/define]
 
+Import at phase 0.
 
 @section{Persistent free-identifier tables}
 @(require (for-label ee-lib/persistent-id-table))
@@ -108,3 +135,22 @@ TODO
 @section{Runtime errors that highlight syntax}
 @(require (for-label ee-lib/errors))
 @defmodule[ee-lib/errors]
+
+
+@section{Changes since "Macros for Domain-Specific Languages"}
+
+@racket[define/hygienic] and @racket[apply-as-transformer] serve different purposes. (Sealing)
+
+No @racket[local-expand] with implicit context. Use @racket[current*s] instead.
+
+
+@section{Limitations}
+
+Implementing arbitrarily nested definition contexts depends on control flow due to dynamic-extent behavior of `with-scope`.
+
+Doesn't get hygiene for splicing forms right.
+
+Doesn't get use-site hygiene for nested definition contexts right; use-site scopes are tracked
+via define/hygienic context, not per scope.
+
+Doesn't get hygiene at boundary with Racket right. Have to enter a define/hygienic first.

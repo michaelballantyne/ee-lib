@@ -7,10 +7,14 @@
 
 (provide
  define-persistent-free-id-table
+ persistent-free-id-table?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
  persist-free-id-table-extensions!)
 
+; Design note: we can't persist via a lift because that'd end up at the end of the module,
+; so entries wouldn't be available during module visit until ithe end of the module
+; is reached.
 
 (struct persistent-free-id-table [persisted transient id])
 

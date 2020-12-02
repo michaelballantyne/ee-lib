@@ -1,6 +1,6 @@
 #lang racket/base
 
-(provide raise-argument-error/stx)
+(provide raise-argument-error/stx (struct-out exn:fail:contract:srcloc))
 
 (define-struct (exn:fail:contract:srcloc
                 exn:fail:contract)

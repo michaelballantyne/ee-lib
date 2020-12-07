@@ -6,6 +6,9 @@
 @author+email["Michael Ballantyne" "michael.ballantyne@gmail.com"]
 
 
+@(define (tech/reference str)
+   (tech #:doc '(lib "scribblings/reference/reference.scrbl") str))
+
 @;-----------------------
 
 @section{Scope, binding, and hygiene operations for DSL expanders}
@@ -16,47 +19,61 @@ Import at phase 1.
 
 @subsection{Scope}
 
+@deftech{scope}
+
+@deftech{rib}
+
+@deftech{sealed}
+
 @defform[(with-scope id body ...)]{
-TODO
+Binds @racket[id] to a fresh @tech{scope} object and evaluates the @racket[body] forms in an a @tech/reference{local binding context} extended with a new @tech{rib}. Bindings established within the dynamic extent of the evaluation of the @racket[body ...] will thus only be available in the @tech/reference{local binding context} within that dynamic extent.
 }
 
 @defproc[(scope? [v any/c]) boolean?]{
-TODO
+Returns @racket[#t] if @racket[v] is a @tech{scope} created by @racket[with-scope] and @racket[#f] otherwise.
 }
 
 @defproc[(add-scope [syntax syntax?] [scope scope?]) syntax?]{
-TODO
+Annotates the @racket[syntax] with the scope-set @tech/reference{scopes} corresponding to the @racket[scope].
 }
 
 @defproc[(add-scopes [syntax syntax?] [scopes (listof scope?)]) syntax?]{
-TODO
+Annotates the @racket[syntax] with the scope-set @tech/reference{scopes} corresponding to all of the @racket[scopes].
 }
 
 @defproc[(splice-from-scope [syntax syntax?] [scope scope?]) syntax?]{
-TODO
+Removes the the scope-set @tech/reference{scopes} corresponding to the @racket[scope] from the @racket[syntax].
 }
 
 @defproc[(syntax-local-introduce-splice [syntax syntax?]) syntax?]{
-TODO
+Flips the current @tech/reference{macro-introduction scope} and removes any @tech/reference{use-site scopes} created for the current expansion context.
 }
 
 
 @subsection{Binding}
 
+@deftech{disappeared use}
+
+@deftech{disappeared binding}
+
+
 @defproc*[([(bind! [id identifier?] [v any/c]) identifier?]
            [(bind! [ids (listof identifier?)] [vs (listof any/c)]) (listof identifier?)])]{
-TODO
+Creates a @tech/reference{binding} for the given @racket[id] which always includes the current scope's scope-set @tech/reference{inside-edge scope}, and extends the current @tech/reference{local binding context} rib with an entry mapping the binding to the value @racket[v]. Also records a @tech{disappeared binding} for @racket[id].
+
+This operation is legal only when in a @tech/reference{local binding context} that has been established by @racket[with-scope] and no intervening context has @tech{sealed} the local binding context.
+
+The second form works like the first, but for lists of corresponding @racket[ids] and @racket[vs].
 }
 
-@defproc[(lookup [id identifier?] [predicate (-> any/c boolean?)]) (or/c #f any/c)]{
-TODO
+@defproc[(lookup [id identifier?] [predicate (-> any/c (or/c #f any/c))]) (or/c #f any/c)]{
+Looks for a binding and corresponding entry in the @tech/reference{local binding context} for @racket[id]. If the binding exists, has an value in the local binding context, and the value satisfies @racket[predicate], the value is returned and a @tech{disappeared use} is recorded for @racket[id]. Otherwise returns @racket[#f].
 }
-
 
 @subsection{Transformer evaluation}
 
 @defproc[(eval-transformer [syntax syntax?]) any/c]{
-TODO
+Evaluates @racket[syntax] at phase level 1.
 }
 
 @subsection{Hygiene}

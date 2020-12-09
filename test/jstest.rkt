@@ -4,6 +4,8 @@
 
 (require "js.rkt" (for-syntax syntax/parse))
 
+(module+ test
+  (when (not (getenv "PLT_PKG_BUILD_SERVICE"))
 (js ((function ()
                  (let x 5)
                  (let-syntax m (lambda (stx)
@@ -11,4 +13,4 @@
                                    [(_ arg)
                                     #'((function (arg) (return x)) 6)])))
                  x
-                 (return (m x)))))
+                 (return (m x)))))))

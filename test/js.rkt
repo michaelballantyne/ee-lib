@@ -346,6 +346,7 @@
 (module+ test
   (require rackunit)
 
+  (when (not (getenv "PLT_PKG_BUILD_SERVICE"))
   (check-equal?
    (js ((function (n)
                   (return n)) 5))
@@ -440,5 +441,4 @@
                   ; Wouldn't work if we weren't using define/hygienic everywhere.
                   (my-let x 5)
                   (return x))))
-   "5"))
-                                       
+   "5")))

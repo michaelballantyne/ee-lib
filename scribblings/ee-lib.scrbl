@@ -33,21 +33,21 @@ Binds @racket[id] to a fresh @tech{scope tagger} and evaluates the @racket[body]
 Returns @racket[#t] if @racket[v] is a @tech{scope tagger} created by @racket[with-scope] and @racket[#f] otherwise.
 }
 
-@defproc[(add-scope [syntax syntax?] [tagger scope-tagger?]) syntax?]{
+@defproc[(add-scope [stx syntax?] [tagger scope-tagger?]) syntax?]{
 
 @tech{scope tagger}
-Annotates the @racket[syntax] with the @tech/reference{scope} tags represented by the @racket[tagger].
+Annotates the @racket[stx] with the @tech/reference{scope} tags represented by the @racket[tagger].
 }
 
-@defproc[(add-scopes [syntax syntax?] [taggers (listof scope-tagger?)]) syntax?]{
-Annotates the @racket[syntax] with all of the @tech/reference{scope} tags represented by the @racket[taggers].
+@defproc[(add-scopes [stx syntax?] [taggers (listof scope-tagger?)]) syntax?]{
+Annotates the @racket[stx] with all of the @tech/reference{scope} tags represented by the @racket[taggers].
 }
 
-@defproc[(splice-from-scope [syntax syntax?] [tagger scope-tagger?]) syntax?]{
-Removes the the scope tags represented by the @racket[tagger] from the @racket[syntax].
+@defproc[(splice-from-scope [stx syntax?] [tagger scope-tagger?]) syntax?]{
+Removes the the scope tags represented by the @racket[tagger] from the @racket[stx].
 }
 
-@defproc[(syntax-local-introduce-splice [syntax syntax?]) syntax?]{
+@defproc[(syntax-local-introduce-splice [stx syntax?]) syntax?]{
 Flips the current @tech/reference{macro-introduction scope} and removes any @tech/reference{use-site scopes} created for the current expansion context.
 }
 
@@ -82,8 +82,8 @@ Looks for a binding and corresponding entry in the @tech{library local binding c
 
 @subsection{Transformer evaluation}
 
-@defproc[(eval-transformer [syntax syntax?]) any/c]{
-Evaluates @racket[syntax] at phase 1.
+@defproc[(eval-transformer [stx syntax?]) any/c]{
+Evaluates @racket[stx] at phase 1.
 }
 
 @subsection{Hygiene}

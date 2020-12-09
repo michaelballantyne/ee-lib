@@ -25,8 +25,8 @@
  racket-var
  racket-var?
  with-scope
- scope?
- scope-introducer
+ scope-tagger?
+ scope-tagger-introducer
  add-scope
  splice-from-scope
  add-scopes
@@ -68,12 +68,12 @@
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
 
-(struct scope [introducer def-ctx])
+(struct scope-tagger [introducer def-ctx])
 
 (define (call-with-scope p)
   (let* ([ctx (syntax-local-make-definition-context (current-def-ctx))]
-         [sc (scope (make-syntax-introducer #t) ctx)])
-    (parameterize ([current-def-ctx (scope-def-ctx sc)]
+         [sc (scope-tagger (make-syntax-introducer #t) ctx)])
+    (parameterize ([current-def-ctx (scope-tagger-def-ctx sc)]
                    [current-ctx-id (gensym 'with-scope-ctx)])
       (p sc))))
 
@@ -87,14 +87,14 @@
      'add-scope
      "syntax?"
      stx))
-  (unless (scope? sc)
+  (unless (scope-tagger? sc)
     (raise-argument-error
      'add-scope
-     "scope?"
+     "scope-tagger?"
      sc))
   (internal-definition-context-introduce
-    (scope-def-ctx sc)
-    ((scope-introducer sc) stx 'add) 'add))
+    (scope-tagger-def-ctx sc)
+    ((scope-tagger-introducer sc) stx 'add) 'add))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)
@@ -102,15 +102,15 @@
      'add-scopes
      "syntax?"
      stx))
-  (unless (and (list? scs) (andmap scope? scs))
+  (unless (and (list? scs) (andmap scope-tagger? scs))
     (raise-argument-error
      'add-scopes
-     "(listof scope?)"
+     "(listof scope-tagger?)"
      scs))
   
   (for/fold ([stx stx])
             ([sc scs])
-    ((scope-introducer sc) stx 'add)))
+    ((scope-tagger-introducer sc) stx 'add)))
 
 (define (splice-from-scope stx sc)
   (unless (syntax? stx)
@@ -118,14 +118,14 @@
      'remove-scope
      "syntax?"
      stx))
-  (unless (scope? sc)
+  (unless (scope-tagger? sc)
     (raise-argument-error
      'remove-scope
-     "scope?"
+     "scope-tagger?"
      sc))
   (internal-definition-context-introduce
-   (scope-def-ctx sc)
-   ((scope-introducer sc) stx 'remove)
+   (scope-tagger-def-ctx sc)
+   ((scope-tagger-introducer sc) stx 'remove)
    'remove))
 
 (define (add-ctx-scope ctx stx)

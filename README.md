@@ -1,3 +1,3 @@
 A library supporting the development of macro-extensible DSLs in Racket.
 
-Work-in-progress, undocumented, and unstable.
+See the documentation at https://docs.racket-lang.org/ee-lib/index.html.

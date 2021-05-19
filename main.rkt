@@ -23,8 +23,6 @@
  racket-var
  racket-var?
  with-scope
- scope-tagger?
- scope-tagger-introducer
  add-scope
  splice-from-scope
  add-scopes
@@ -66,14 +64,11 @@
 (define current-def-ctx (make-parameter #f))
 (define current-ctx-id (make-parameter #f))
 
-(struct scope-tagger [introducer def-ctx])
-
 (define (call-with-scope p)
-  (let* ([ctx (syntax-local-make-definition-context (current-def-ctx))]
-         [sc (scope-tagger (make-syntax-introducer #t) ctx)])
-    (parameterize ([current-def-ctx (scope-tagger-def-ctx sc)]
+  (let* ([ctx (syntax-local-make-definition-context (current-def-ctx))])
+    (parameterize ([current-def-ctx ctx]
                    [current-ctx-id (gensym 'with-scope-ctx)])
-      (p sc))))
+      (p ctx))))
 
 (define-simple-macro
   (with-scope name:id body ...)
@@ -85,14 +80,12 @@
      'add-scope
      "syntax?"
      stx))
-  (unless (scope-tagger? sc)
+  (unless (internal-definition-context? sc)
     (raise-argument-error
      'add-scope
-     "scope-tagger?"
+     "internal-definition-context?"
      sc))
-  (internal-definition-context-introduce
-    (scope-tagger-def-ctx sc)
-    ((scope-tagger-introducer sc) stx 'add) 'add))
+  (internal-definition-context-add-scopes sc stx))
 
 (define (add-scopes stx scs)
   (unless (syntax? stx)
@@ -100,15 +93,15 @@
      'add-scopes
      "syntax?"
      stx))
-  (unless (and (list? scs) (andmap scope-tagger? scs))
+  (unless (and (list? scs) (andmap internal-definition-context? scs))
     (raise-argument-error
      'add-scopes
-     "(listof scope-tagger?)"
+     "(listof internal-definition-context?)"
      scs))
   
   (for/fold ([stx stx])
             ([sc scs])
-    ((scope-tagger-introducer sc) stx 'add)))
+    (internal-definition-context-add-scopes sc stx)))
 
 (define (splice-from-scope stx sc)
   (unless (syntax? stx)
@@ -116,15 +109,12 @@
      'remove-scope
      "syntax?"
      stx))
-  (unless (scope-tagger? sc)
+  (unless (internal-definition-context? sc)
     (raise-argument-error
      'remove-scope
-     "scope-tagger?"
+     "internal-definition-context?"
      sc))
-  (internal-definition-context-introduce
-   (scope-tagger-def-ctx sc)
-   ((scope-tagger-introducer sc) stx 'remove)
-   'remove))
+  (internal-definition-context-remove-scopes sc stx))
 
 (define (add-ctx-scope ctx stx)
   (if ctx

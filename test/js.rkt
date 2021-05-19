@@ -89,7 +89,10 @@
        #:do [(define binding (lookup #'head))]
        #:when (js-macro? binding)
        (js-expand-expression
-        (js-macro-transform binding stx))]
+        (apply-as-transformer (lambda (stx) (js-macro-transform binding stx))
+                              #'head
+                              'expression
+                              stx))]
 
       ; expressions; move here from generics definitions
       [(#%js-datum n:number) this-syntax]

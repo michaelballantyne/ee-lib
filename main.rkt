@@ -7,8 +7,6 @@
   syntax/parse/define
 
   syntax/id-table
-  (rename-in "private/apply-as-transformer.rkt"
-             [apply-as-transformer prim-apply-as-transformer])
   (for-template "private/lift-disappeareds.rkt")
   (for-syntax
    racket/base
@@ -214,7 +212,7 @@
   (syntax-local-identifier-as-binding
    (syntax-local-introduce stx)))
 
-(define (apply-as-transformer f ctx-type-arg . args)
+(define (apply-as-transformer f f-id ctx-type-arg . args)
   (unless (procedure? f)
     (raise-argument-error
      'apply-as-transformer
@@ -226,17 +224,29 @@
      "(or/c 'expression 'definition)"
      ctx-type-arg))
 
-  (apply-with-hygiene f ctx-type-arg #t args))
+  (apply-with-hygiene f f-id ctx-type-arg #t args))
 
-(define (apply-with-hygiene f ctx-type seal? args)
+(define (syntax-local-apply-transformer-use-site-workaround
+         f f-id ctx-type def-ctx . args)
+  (if (eq? ctx-type 'expression)
+      ; Expand as a definition first to get a use-site scope, as a workaround for
+      ; https://github.com/racket/racket/pull/2237
+      (apply syntax-local-apply-transformer
+             (lambda args
+               (apply syntax-local-apply-transformer f f-id 'expression def-ctx args))
+             f-id (list (gensym)) def-ctx args)
+      (apply syntax-local-apply-transformer f f-id ctx-type def-ctx args)))
+
+(define (apply-with-hygiene f f-id ctx-type seal? args)
   (define def-ctx (current-def-ctx))
   (parameterize ([current-def-ctx (if seal? #f (current-def-ctx))])
-    (apply prim-apply-as-transformer
+    (apply syntax-local-apply-transformer-use-site-workaround
            f
+           f-id
            (case ctx-type
              [(expression) 'expression]
              [(definition) (list (current-ctx-id))])
-           (if def-ctx (list def-ctx) '())
+           def-ctx
            args)))
 
 (begin-for-syntax
@@ -256,7 +266,7 @@
          (define (tmp arg ...)
            body ...)
          (define (name arg ...)
-           (apply-with-hygiene tmp ctx.type ctx.seal? (list arg ...))))]))
+           (apply-with-hygiene tmp #'name ctx.type ctx.seal? (list arg ...))))]))
 
 ; convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)
@@ -271,7 +281,7 @@
          (define-template-metafunction (name stx)
            (syntax-parse stx
              [(_ t)
-              (apply-as-transformer tmp ctx.type #'t)])))]))
+              (apply-as-transformer tmp #'name ctx.type #'t)])))]))
 
 ; applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function

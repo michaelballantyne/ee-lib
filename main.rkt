@@ -50,7 +50,7 @@
  definition-macro)
 
 (define (bound? id)
- (identifier-binding id (syntax-local-phase-level) #t))
+  (identifier-binding id (syntax-local-phase-level) #t))
 
 (define (same-binding? id1 id2)
   (let ([id1-ext (if (syntax-transforming?) (flip-intro-scope id1) id1)]
@@ -233,13 +233,16 @@
 
 (define (syntax-local-apply-transformer-use-site-workaround
          f f-id ctx-type def-ctx . args)
+  (define (maybe-flip v)
+    (if (syntax? v) (flip-intro-scope v) v))
   (if (eq? ctx-type 'expression)
       ; Expand as a definition first to get a use-site scope, as a workaround for
       ; https://github.com/racket/racket/pull/2237
-      (apply syntax-local-apply-transformer
-             (lambda args
-               (apply syntax-local-apply-transformer f f-id 'expression def-ctx args))
-             f-id (list (gensym)) def-ctx args)
+      (let ([f-id^ (maybe-flip f-id)])
+        (apply syntax-local-apply-transformer
+               (lambda args
+                 (apply syntax-local-apply-transformer f (maybe-flip f-id^) 'expression def-ctx args))
+               f-id (list (gensym)) def-ctx args))
       (apply syntax-local-apply-transformer f f-id ctx-type def-ctx args)))
 
 (define (apply-with-hygiene f f-id ctx-type seal? args)

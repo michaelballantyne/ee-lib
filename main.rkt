@@ -289,7 +289,7 @@
          (define-template-metafunction (name stx)
            (syntax-parse stx
              [(_ t)
-              (apply-as-transformer tmp #'name ctx.type #'t)])))]))
+              (apply-as-transformer tmp #f ctx.type #'t)])))]))
 
 ; applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function

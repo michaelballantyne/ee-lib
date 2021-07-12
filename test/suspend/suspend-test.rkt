@@ -1,8 +1,9 @@
 (module a racket
-  (#%module-begin
-   (#%require "suspend.rkt")
+  (#%plain-module-begin
+   (#%require "suspend.rkt" rackunit)
    (#%require racket/base)
-   list
    (#%expression
-    (boundary (mylanglet x (mycons x (mylanglet y (myrkt (list 5
-                                                               (boundary x))))))))))
+    (check-equal?
+     (boundary (mylanglet x (mycons x (mylanglet y (myrkt (list 5
+                                                               (boundary x)))))))
+     '(x 5 x)))))

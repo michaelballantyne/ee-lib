@@ -6,6 +6,7 @@
   "../../define.rkt"
   (for-syntax
    racket
+   racket/pretty
    syntax/id-table
    (rename-in syntax/parse [define/syntax-parse def/stx])
    "../../main.rkt"))
@@ -26,6 +27,7 @@
       [(mylanglet v b)
        (with-scope s
          (def/stx x^ (bind! (add-scope #'v s) (mylangbinding)))
+         ;(pretty-print (syntax-debug-info (flip-intro-scope #'x^)))
          (def/stx b^ (my-expand (add-scope #'b s)))
          (qstx/rc (mylanglet x^ b^)))]
       [(mycons e1 e2)
@@ -46,6 +48,7 @@
     (syntax-parse stx
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
+       ;(pretty-print (syntax-debug-info (flip-intro-scope #'v)))
        (def/stx v^ (add-fresh-name! symtable #'v))
        ;(displayln 'compiled-binding)
        ;(displayln (syntax-debug-info #'v^ (syntax-local-phase-level) #t))
@@ -53,7 +56,11 @@
       [(mycons e1 e2)
        #`(cons #,(my-compile #'e1) #,(my-compile #'e2))]
       [x:id
-       (define res (syntax-local-get-shadower (free-id-table-ref symtable #'x) #t))
+       ;(pretty-print (syntax-debug-info (flip-intro-scope #'x)))
+       (define res (syntax-local-get-shadower
+                    (flip-intro-scope
+                     (free-id-table-ref symtable
+                                        (flip-intro-scope #'x))) #t))
        ;(displayln 'compiled-ref)
        ;(displayln (syntax-debug-info res (syntax-local-phase-level) #t))
        res]

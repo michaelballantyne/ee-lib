@@ -333,10 +333,10 @@
   (define result (generate-temporary id))
 
   (free-id-table-set! table
-                      (syntax-local-introduce id)
+                      (flip-intro-scope id)
                       result)
   
-  (syntax-local-introduce
+  (flip-intro-scope
    result))
 
 (define (module-macro t)

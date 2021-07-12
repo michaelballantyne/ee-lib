@@ -3,7 +3,8 @@
 (require
   racket/base
   syntax/id-table
-  (for-template racket/base))
+  (for-template racket/base)
+  "private/flip-intro-scope.rkt")
 
 (provide
  define-persistent-free-id-table
@@ -48,7 +49,7 @@
 (define (persist-free-id-table-extensions! t)
   (define alist
     (for/list ([(k v) (in-free-id-table (persistent-free-id-table-transient t))])
-      #`(cons #'#,(syntax-local-introduce k) '#,v)))
+      #`(cons #'#,(flip-intro-scope k) '#,v)))
   #`(begin-for-syntax
       (do-extension! #,(persistent-free-id-table-id t)
                      (list . #,alist))))

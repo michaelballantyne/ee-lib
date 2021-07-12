@@ -13,12 +13,14 @@
    syntax/parse
    racket/syntax
    (only-in syntax/parse [define/syntax-parse def/stx]))
-  (for-template racket/base))
+  (for-template racket/base)
+
+  "private/flip-intro-scope.rkt")
 
 (provide
  flip-intro-scope
  same-binding?
- 
+
  qstx/rc ; read as quasisyntax/loc+props
  qstx/lp
 
@@ -46,19 +48,6 @@
  non-module-begin-macro
  expression-macro
  definition-macro)
-
-(define (make-intro-scope-introducer)
-  (define no-scope (datum->syntax #f 'foo))
-  (define intro-scope
-    (syntax-local-identifier-as-binding
-     (syntax-local-introduce
-      no-scope)))
-  (make-syntax-delta-introducer
-   intro-scope
-   no-scope))
-
-(define (flip-intro-scope stx)
-  ((make-intro-scope-introducer) stx 'flip))
 
 (define (bound? id)
  (identifier-binding id (syntax-local-phase-level) #t))
@@ -168,14 +157,14 @@
         #f
         #`'#,rhs-arg))
 
-  (syntax-local-bind-syntaxes (if (list? id) id (list id)) rhs (current-def-ctx))
+  (define ids-in-sc
+    (syntax-local-bind-syntaxes
+     (if (list? id) id (list id))
+     rhs
+     (current-def-ctx)))
 
-  (define (in-sc id)
-    (add-ctx-scope (current-def-ctx) (syntax-local-identifier-as-binding id)))
-
-  (define id-in-sc (if (list? id) (map in-sc id) (in-sc id)))
-  (apply lift-disappeared-bindings! (if (list? id-in-sc) id-in-sc (list id-in-sc)))
-  id-in-sc)
+  (apply lift-disappeared-bindings! ids-in-sc)
+  (if (list? id) ids-in-sc (car ids-in-sc)))
 
 ; This should use syntax-local-eval, but that's currently buggy.
 ; Change to use syntax-local-eval after my fix gets in a release:

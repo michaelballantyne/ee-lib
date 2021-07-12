@@ -16,6 +16,9 @@
   (for-template racket/base))
 
 (provide
+ flip-intro-scope
+ same-binding?
+ 
  qstx/rc ; read as quasisyntax/loc+props
  qstx/lp
 
@@ -42,8 +45,30 @@
  module-macro
  non-module-begin-macro
  expression-macro
- definition-macro
- )
+ definition-macro)
+
+(define (make-intro-scope-introducer)
+  (define no-scope (datum->syntax #f 'foo))
+  (define intro-scope
+    (syntax-local-identifier-as-binding
+     (syntax-local-introduce
+      no-scope)))
+  (make-syntax-delta-introducer
+   intro-scope
+   no-scope))
+
+(define (flip-intro-scope stx)
+  ((make-intro-scope-introducer) stx 'flip))
+
+(define (bound? id)
+ (identifier-binding id (syntax-local-phase-level) #t))
+
+(define (same-binding? id1 id2)
+  (let ([id1-ext (if (syntax-transforming?) (flip-intro-scope id1) id1)]
+        [id2-ext (if (syntax-transforming?) (flip-intro-scope id2) id2)])
+    (and (bound? id1-ext)
+         (bound? id2-ext)
+         (free-identifier=? id1-ext id2-ext))))
 
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()
@@ -118,8 +143,8 @@
 
 (define (add-ctx-scope ctx stx)
   (if ctx
-    (internal-definition-context-introduce ctx stx 'add)
-    stx))
+      (internal-definition-context-introduce ctx stx 'add)
+      stx))
 
 (struct racket-var [])
 
@@ -200,7 +225,8 @@
 
 (define (syntax-local-introduce-splice stx)
   (syntax-local-identifier-as-binding
-   (syntax-local-introduce stx)))
+   (syntax-local-introduce stx)
+   (current-def-ctx)))
 
 (define (apply-as-transformer f f-id ctx-type-arg . args)
   (unless (procedure? f)
@@ -256,7 +282,7 @@
          (define (tmp arg ...)
            body ...)
          (define (name arg ...)
-           (apply-with-hygiene tmp #'name ctx.type ctx.seal? (list arg ...))))]))
+           (apply-with-hygiene tmp #f ctx.type ctx.seal? (list arg ...))))]))
 
 ; convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)

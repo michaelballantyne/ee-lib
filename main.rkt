@@ -274,9 +274,19 @@
          (define (tmp arg ...)
            body ...)
          (define (name arg ...)
-           (apply-with-hygiene tmp #f ctx.type ctx.seal? (list arg ...))))]))
+           ; Hack: Provide a name from racket/base (which we require for-template)
+           ; as binding-id to avoid creation of use-site scopes for define/hygienic.
+           ;
+           ; We don't need use-site scopes here because we know that *all*
+           ; invocations of define/hygienic generate syntax with unique scopes,
+           ; so syntax from a use (that is, one invocation) can't bind syntax
+           ; from another invocation.
+           ;
+           ; Interface macros also generate syntax with unique scopes, so we don't
+           ; have to worry about use-site binders from those entry points either.
+           (apply-with-hygiene tmp #'car ctx.type ctx.seal? (list arg ...))))]))
 
-; convenient for cmdline-ee case study
+; Convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)
 (provide define/hygienic-metafunction)
 (define-syntax define/hygienic-metafunction
@@ -289,9 +299,10 @@
          (define-template-metafunction (name stx)
            (syntax-parse stx
              [(_ t)
-              (apply-as-transformer tmp #f ctx.type #'t)])))]))
+              ; Hack: See discussion of binding-id in define/hygienic.
+              (apply-as-transformer tmp #'car ctx.type #'t)])))]))
 
-; applies the function f to each element of the tree, starting
+; Applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function
 ; is applied to the syntax object but not its immediate datum contents.
 (define (map-transform f stx)
@@ -309,7 +320,9 @@
   (f (recur stx)))
 
 ; Do I use this? Should it be a persistent-id-table operation instead?
-
+;   May only be used in test/suspend/suspend.rkt now.
+; Note that uses of free-id-table-ref to access these entries also need
+; flip-intro-scope; perhaps I need a helper for that too.
 (define (add-fresh-name! table id)
   (unless (mutable-free-id-table? table)
     (raise-argument-error

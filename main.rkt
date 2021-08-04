@@ -117,18 +117,18 @@
             ([sc scs])
     (internal-definition-context-add-scopes sc stx)))
 
-(define (splice-from-scope stx sc)
-  (unless (syntax? stx)
+(define (splice-from-scope id sc)
+  (unless (identifier? id)
     (raise-argument-error
-     'remove-scope
-     "syntax?"
-     stx))
+     'splice-from-scope
+     "identifier?"
+     id))
   (unless (internal-definition-context? sc)
     (raise-argument-error
-     'remove-scope
+     'splice-from-scope
      "internal-definition-context?"
      sc))
-  (internal-definition-context-remove-scopes sc stx))
+  (internal-definition-context-splice-binding-identifier sc id))
 
 (define (add-ctx-scope ctx stx)
   (if ctx

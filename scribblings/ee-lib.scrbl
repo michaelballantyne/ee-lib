@@ -44,8 +44,8 @@ Annotates the @racket[stx] with the @tech{scope tags} represented by the @racket
 @;Annotates the @racket[stx] with all of the @tech/reference{scope} tags represented by the @racket[taggers].
 @;}
 
-@defproc[(splice-from-scope [stx syntax?] [tagger scope-tagger?]) syntax?]{
-Removes the the @tech{scope tags} represented by the @racket[tagger] from the @racket[stx].
+@defproc[(splice-from-scope [id identifier?] [tagger scope-tagger?]) syntax?]{
+Removes the the @tech{scope tags} represented by the @racket[tagger] from the @racket[id].
 
 Useful for implementing splicing forms like @racket[splicing-let] where certain bindings that initially appear to be within a scope in fact splice outside of it.
 }

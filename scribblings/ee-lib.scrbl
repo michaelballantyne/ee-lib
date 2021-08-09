@@ -192,14 +192,22 @@ Expanders also need to apply macro hygiene when invoking macros, via
 @racket[bind!], so @racket[apply-as-transformer] @tech[#:key "sealed"]{seals}
 the binding context.
 
-@defproc[(apply-as-transformer [proc procedure?] [ctx-type (or/c 'expression 'definition)]
+@defproc[(apply-as-transformer [proc procedure?]
+                               [binding-id (or/c identifier? #f)]
+                               [ctx-type (or/c 'expression 'definition)]
                                [arg any/c] ...)
           any]{
 
 Calls the function @racket[proc] with the same expansion context and hygiene
 behavior as calling a function defined by @racket[define/hygienic], except that
-the @racket{library local binding context} is always @tech{sealed}.
+the @tech{library local binding context} is always @tech{sealed}.
 
+The @racket[binding-id] argument specifies a binding associated with the
+@racket[proc], which the expander uses to determine whether to add
+@tech/reference{use-site scopes} and which @tech/reference{code inspector}
+to use during expansion.
+
+@history[#:changed "1.0" @elem{Added the @racket[binding-id] argument.}]
 }
 
 @subsection{Transformer evaluation}

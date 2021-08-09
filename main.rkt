@@ -223,6 +223,14 @@
      'apply-as-transformer
      "procedure?"
      f))
+
+  (unless (or (identifier? f-id)
+              (not f-id))
+    (raise-argument-error
+     'apply-as-transformer
+     "(or/c identifier? #f)"
+     f-id))
+  
   (unless (member ctx-type-arg '(expression definition))
     (raise-argument-error
      'apply-as-transformer

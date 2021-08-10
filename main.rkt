@@ -167,7 +167,7 @@
   (if (list? id) ids-in-sc (car ids-in-sc)))
 
 (define (eval-transformer stx)
-  (syntax-local-eval stx (current-def-ctx)))
+  (syntax-local-eval stx (or (current-def-ctx) '())))
 
 ; used only for eq? equality.
 (define unbound

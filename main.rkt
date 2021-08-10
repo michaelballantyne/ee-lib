@@ -166,22 +166,8 @@
   (apply lift-disappeared-bindings! ids-in-sc)
   (if (list? id) ids-in-sc (car ids-in-sc)))
 
-; This should use syntax-local-eval, but that's currently buggy.
-; Change to use syntax-local-eval after my fix gets in a release:
-; https://github.com/racket/racket/pull/3517
 (define (eval-transformer stx)
-  (define ctx (syntax-local-make-definition-context (current-def-ctx)))
-  (define id (generate-temporary #'x))
-
-  (syntax-local-bind-syntaxes
-   (list id)
-   (add-ctx-scope (current-def-ctx) stx)
-   ctx)
-
-  (syntax-local-value
-   (internal-definition-context-introduce ctx id 'add)
-   (lambda () (error 'eval-transformer "shouldn't happen"))
-   ctx))
+  (syntax-local-eval stx (current-def-ctx)))
 
 ; used only for eq? equality.
 (define unbound

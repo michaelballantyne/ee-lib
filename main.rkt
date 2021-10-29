@@ -163,8 +163,12 @@
      rhs
      (current-def-ctx)))
 
-  (apply lift-disappeared-bindings! ids-in-sc)
-  (if (list? id) ids-in-sc (car ids-in-sc)))
+  (define ids-with-prop
+    (for/list ([id ids-in-sc])
+      (syntax-property id 'binder #t)))
+
+  (apply lift-disappeared-bindings! ids-with-prop)
+  (if (list? id) ids-with-prop (car ids-with-prop)))
 
 (define (eval-transformer stx)
   (syntax-local-eval stx (or (current-def-ctx) '())))

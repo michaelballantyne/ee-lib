@@ -157,11 +157,18 @@
         #f
         #`'#,rhs-arg))
 
-  (define ids-in-sc
-    (syntax-local-bind-syntaxes
-     (if (list? id) id (list id))
-     rhs
-     (current-def-ctx)))
+  ;; Adjust scopes manually rather than use the result of syntax-local-bind-syntaxes
+  ;; so that we can check that the names are not already bound.
+  (define ids-in-sc (for/list ([id (if (list? id) id (list id))])
+                      (syntax-local-identifier-as-binding
+                       (internal-definition-context-introduce (current-def-ctx) id 'add)
+                       (current-def-ctx))))
+  (check-not-bound ids-in-sc (current-def-ctx))
+  
+  (syntax-local-bind-syntaxes
+   ids-in-sc
+   rhs
+   (current-def-ctx))
 
   (define ids-with-prop
     (for/list ([id ids-in-sc])
@@ -169,6 +176,17 @@
 
   (apply lift-disappeared-bindings! ids-with-prop)
   (if (list? id) ids-with-prop (car ids-with-prop)))
+
+(define (check-not-bound ids def-ctx)
+  ;; internal-definition-context-binding-identifiers returns ids in positive space.
+  ;; Flip to negative to compare.
+  (define ctx-bound-ids
+    (map flip-intro-scope
+         (internal-definition-context-binding-identifiers def-ctx)))
+  
+  (for ([id ids])
+    (when (member id ctx-bound-ids bound-identifier=?)
+      (wrong-syntax id "identifier already defined"))))
 
 (define (eval-transformer stx)
   (syntax-local-eval stx (or (current-def-ctx) '())))

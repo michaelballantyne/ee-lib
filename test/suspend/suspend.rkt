@@ -48,22 +48,12 @@
     (syntax-parse stx
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
-       ;(pretty-print (syntax-debug-info (flip-intro-scope #'v)))
-       (def/stx v^ (add-fresh-name! symtable #'v))
-       ;(displayln 'compiled-binding)
-       ;(displayln (syntax-debug-info #'v^ (syntax-local-phase-level) #t))
+       (def/stx v^ (compile-binder! symtable #'v))
        #`(let ([v^ 'v]) #,(my-compile #'b))]
       [(mycons e1 e2)
        #`(cons #,(my-compile #'e1) #,(my-compile #'e2))]
       [x:id
-       ;(pretty-print (syntax-debug-info (flip-intro-scope #'x)))
-       (define res (syntax-local-get-shadower
-                    (flip-intro-scope
-                     (free-id-table-ref symtable
-                                        (flip-intro-scope #'x))) #t))
-       ;(displayln 'compiled-ref)
-       ;(displayln (syntax-debug-info res (syntax-local-phase-level) #t))
-       res]
+       (compile-reference symtable #'x)]
       [(myrkt e ctx)
        #'(resumption e ctx)]
       )))

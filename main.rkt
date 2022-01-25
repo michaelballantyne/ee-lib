@@ -42,7 +42,9 @@
 
  map-transform
  syntax-local-introduce-splice
- add-fresh-name!
+
+ compile-binder!
+ compile-reference
 
  module-macro
  non-module-begin-macro
@@ -335,19 +337,25 @@
       [else stx]))
   (f (recur stx)))
 
-; Do I use this? Should it be a persistent-id-table operation instead?
-;   May only be used in test/suspend/suspend.rkt now.
-; Note that uses of free-id-table-ref to access these entries also need
-; flip-intro-scope; perhaps I need a helper for that too.
-(define (add-fresh-name! table id)
+(define (get-module-inside-edge-introducer)
+  (make-syntax-delta-introducer
+   (eval-syntax #`#'#,(datum->syntax #f 'get-module-inside-edge/id))
+   (datum->syntax #f 'get-module-inside-edge/id)))
+
+(define (syntax-local-get-shadower/including-module id)
+  ((get-module-inside-edge-introducer)
+   (syntax-local-get-shadower id)
+   'add))
+
+(define (compile-binder! table id)
   (unless (mutable-free-id-table? table)
     (raise-argument-error
-     'add-fresh-name!
+     'compile-binder!
      "mutable-free-id-table?"
      table))
   (unless (identifier? id)
     (raise-argument-error
-     'add-fresh-name!
+     'compile-binder!
      "identifier?"
      id))
     
@@ -359,6 +367,27 @@
   
   (flip-intro-scope
    result))
+
+(define (compile-reference table id)
+  (unless (mutable-free-id-table? table)
+    (raise-argument-error
+     'compile-reference
+     "mutable-free-id-table?"
+     table))
+  (unless (identifier? id)
+    (raise-argument-error
+     'compile-reference
+     "identifier?"
+     id))
+
+  (define table-val
+    (free-id-table-ref
+     table
+     (flip-intro-scope id)))
+  
+  (syntax-local-get-shadower/including-module
+   (flip-intro-scope
+    table-val)))
 
 (define (module-macro t)
   (lambda (stx)

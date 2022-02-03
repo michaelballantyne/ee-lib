@@ -339,8 +339,8 @@
 
 (define (get-module-inside-edge-introducer)
   (make-syntax-delta-introducer
-   (eval-syntax #`#'#,(datum->syntax #f 'get-module-inside-edge/id))
-   (datum->syntax #f 'get-module-inside-edge/id)))
+   (eval-syntax #`#'#,(datum->syntax #f 'get-module-inside-edge-introducer/id))
+   (datum->syntax #f 'get-module-inside-edge-introducer/id)))
 
 (define (syntax-local-get-shadower/including-module id)
   ((get-module-inside-edge-introducer)

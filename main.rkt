@@ -46,6 +46,8 @@
  compile-binder!
  compile-reference
 
+ in-space
+
  module-macro
  non-module-begin-macro
  expression-macro
@@ -139,7 +141,7 @@
 
 (struct racket-var [])
 
-(define (bind! id rhs-arg)
+(define (bind! id rhs-arg #:space [binding-space #f])
   (unless (or (identifier? id) (and (list? id) (andmap identifier? id)))
     (raise-argument-error
      'bind!
@@ -162,9 +164,10 @@
   ;; Adjust scopes manually rather than use the result of syntax-local-bind-syntaxes
   ;; so that we can check that the names are not already bound.
   (define ids-in-sc (for/list ([id (if (list? id) id (list id))])
-                      (syntax-local-identifier-as-binding
-                       (internal-definition-context-introduce (current-def-ctx) id 'add)
-                       (current-def-ctx))))
+                      ((in-space binding-space)
+                       (syntax-local-identifier-as-binding
+                        (internal-definition-context-introduce (current-def-ctx) id 'add)
+                        (current-def-ctx)))))
   (check-not-bound ids-in-sc (current-def-ctx))
   
   (syntax-local-bind-syntaxes
@@ -199,14 +202,14 @@
     (struct unbound [])
     (unbound)))
 
-(define (lookup id [predicate (lambda (v) #t)])
+(define (lookup id [predicate (lambda (v) #t)] #:space [binding-space #f])
   (unless (identifier? id)
     (raise-argument-error
      'lookup
      "identifier?"
      id))
 
-  (define id-in-sc (add-ctx-scope (current-def-ctx) id))
+  (define id-in-sc ((in-space binding-space) (add-ctx-scope (current-def-ctx) id)))
   (define result
     (syntax-local-value
      id-in-sc
@@ -388,6 +391,14 @@
   (syntax-local-get-shadower/including-module
    (flip-intro-scope
     table-val)))
+
+(define ((in-space binding-space) stx)
+  (if binding-space
+      (let ([sym (if (symbol? binding-space)
+                     binding-space
+                     (syntax-e binding-space))])
+        ((make-interned-syntax-introducer sym) stx 'add))
+      stx))
 
 (define (module-macro t)
   (lambda (stx)

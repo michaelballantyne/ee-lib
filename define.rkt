@@ -5,21 +5,37 @@
    racket/base
    (rename-in syntax/parse [define/syntax-parse def/stx])
    racket/syntax
-   racket/generic))
+   racket/generic
+   ee-lib))
 
 (provide
  define-literal-forms
  define-extensible-syntax)
 
-(define-syntax-rule (define-literal-forms literal-set-name msg (name ...))
-  (begin
-    (define-for-syntax (expand-to-error stx)
-      (raise-syntax-error #f msg stx))
-    (define-syntax name expand-to-error)
-    ...
-    (begin-for-syntax
-      (define-literal-set literal-set-name
-        (name ...)))))
+(begin-for-syntax
+  (define-syntax-class symbol
+    (pattern stx:id
+             #:attr sym (syntax-e (attribute stx)))))
+
+(define-syntax define-literal-forms
+  (syntax-parser
+    [(_ literal-set-name:id
+        (~optional (~seq #:syntax-class syntax-class-name:id))
+        (~optional (~seq #:binding-space (~or space:symbol #f)))
+        msg:expr (name:id ...))
+     #:with (spaced-name ...) (map (in-space (attribute space.sym)) (attribute name))
+     #'(begin
+         (define-for-syntax (expand-to-error stx)
+           (raise-syntax-error #f msg stx))
+         (define-syntax spaced-name expand-to-error)
+         ...
+         (begin-for-syntax
+           (define-literal-set literal-set-name
+             (spaced-name ...))
+           (~? (define-syntax-class syntax-class-name
+                 #:literal-sets (literal-set-name)
+                 (pattern (~or spaced-name ...)))
+               (begin))))]))
 
 (require (for-syntax syntax/parse/private/sc))
 

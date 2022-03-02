@@ -33,8 +33,10 @@
  add-scopes
  lookup
  apply-as-transformer
+
  define/hygienic
  define/hygienic-metafunction
+ 
  current-def-ctx
  current-ctx-id
 
@@ -278,34 +280,36 @@
            def-ctx
            args)))
 
+(define (wrap-hygiene f ctx-type)
+  (lambda args
+    ; Hack: Provide a name from racket/base (which we require for-template)
+    ; as binding-id to avoid creation of use-site scopes for define/hygienic.
+    ;
+    ; We don't need use-site scopes here because we know that *all*
+    ; invocations of define/hygienic generate syntax with unique scopes,
+    ; so syntax from a use (that is, one invocation) can't bind syntax
+    ; from another invocation.
+    ;
+    ; Interface macros also generate syntax with unique scopes, so we don't
+    ; have to worry about use-site binders from those entry points either.
+    (apply-with-hygiene f #'car ctx-type (eq? ctx-type 'expression) args)))
+
 (begin-for-syntax
   (define-syntax-class ctx-type
     (pattern #:expression
-             #:attr type #''expression
-             #:attr seal? #'#t)
+             #:attr type #''expression)
     (pattern #:definition
-             #:attr type #''definition
-             #:attr seal? #'#f)))
+             #:attr type #''definition)))
 
 (define-syntax define/hygienic
   (syntax-parser
     [(_ (name:id arg:id ...) ctx:ctx-type
         body ...+)
-     #'(begin
-         (define (tmp arg ...)
-           body ...)
-         (define (name arg ...)
-           ; Hack: Provide a name from racket/base (which we require for-template)
-           ; as binding-id to avoid creation of use-site scopes for define/hygienic.
-           ;
-           ; We don't need use-site scopes here because we know that *all*
-           ; invocations of define/hygienic generate syntax with unique scopes,
-           ; so syntax from a use (that is, one invocation) can't bind syntax
-           ; from another invocation.
-           ;
-           ; Interface macros also generate syntax with unique scopes, so we don't
-           ; have to worry about use-site binders from those entry points either.
-           (apply-with-hygiene tmp #'car ctx.type ctx.seal? (list arg ...))))]))
+     #'(define name
+         (wrap-hygiene
+          (lambda (arg ...)
+            body ...)
+          ctx.type))]))
 
 ; Convenient for cmdline-ee case study
 (require syntax/parse/experimental/template)
@@ -314,14 +318,10 @@
   (syntax-parser
     [(_ (name:id arg:id) ctx:ctx-type
         body ...)
-     #'(begin
-         (define (tmp arg)
-           body ...)
-         (define-template-metafunction (name stx)
-           (syntax-parse stx
-             [(_ t)
-              ; Hack: See discussion of binding-id in define/hygienic.
-              (apply-as-transformer tmp #'car ctx.type #'t)])))]))
+     #'(define-template-metafunction name
+         (wrap-hygienic
+          (lambda (arg) body ...)
+          ctx.type))]))
 
 ; Applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function

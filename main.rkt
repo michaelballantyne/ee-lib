@@ -36,6 +36,7 @@
 
  define/hygienic
  define/hygienic-metafunction
+ wrap-hygiene
  
  current-def-ctx
  current-ctx-id

@@ -2,6 +2,8 @@
 
 (provide flip-intro-scope)
 
+(require racket/private/check)
+
 (define (make-intro-scope-introducer)
   (define no-scope (datum->syntax #f 'foo))
   (define intro-scope
@@ -12,5 +14,6 @@
    intro-scope
    no-scope))
 
-(define (flip-intro-scope stx)
+(define/who (flip-intro-scope stx)
+  (check who syntax? stx)
   ((make-intro-scope-introducer) stx 'flip))

@@ -5,6 +5,7 @@
   racket/syntax
   syntax/parse
   syntax/parse/define
+  racket/private/check
 
   syntax/id-table
   (for-template "private/lift-disappeareds.rkt")
@@ -15,7 +16,8 @@
    (only-in syntax/parse [define/syntax-parse def/stx]))
   (for-template racket/base)
 
-  "private/flip-intro-scope.rkt")
+  "private/flip-intro-scope.rkt"
+  "persistent-id-table.rkt")
 
 (provide
  flip-intro-scope
@@ -47,6 +49,7 @@
  syntax-local-introduce-splice
 
  compile-binder!
+ compile-binders!
  compile-reference
 
  in-space
@@ -54,12 +57,16 @@
  module-macro
  non-module-begin-macro
  expression-macro
- definition-macro)
+ definition-macro
+ )
 
 (define (bound? id)
   (identifier-binding id (syntax-local-phase-level) #t))
 
-(define (same-binding? id1 id2)
+(define/who (same-binding? id1 id2)
+  (check who identifier? id1)
+  (check who identifier? id2)
+  
   (let ([id1-ext (if (syntax-transforming?) (flip-intro-scope id1) id1)]
         [id2-ext (if (syntax-transforming?) (flip-intro-scope id2) id2)])
     (and (bound? id1-ext)
@@ -95,46 +102,26 @@
   (with-scope name:id body ...)
   (call-with-scope (lambda (name) body ...)))
 
-(define (add-scope stx sc)
-  (unless (syntax? stx)
-    (raise-argument-error
-     'add-scope
-     "syntax?"
-     stx))
-  (unless (internal-definition-context? sc)
-    (raise-argument-error
-     'add-scope
-     "internal-definition-context?"
-     sc))
+(define/who (add-scope stx sc)
+  (check who syntax? stx)
+  (check who internal-definition-context? sc)
+  
   (internal-definition-context-add-scopes sc stx))
 
-(define (add-scopes stx scs)
-  (unless (syntax? stx)
-    (raise-argument-error
-     'add-scopes
-     "syntax?"
-     stx))
-  (unless (and (list? scs) (andmap internal-definition-context? scs))
-    (raise-argument-error
-     'add-scopes
-     "(listof internal-definition-context?)"
-     scs))
+(define/who (add-scopes stx scs)
+  (check who syntax? stx)
+  (check who (lambda (v) (and (list? v) (andmap internal-definition-context? v)))
+         #:contract "(listof internal-definition-context?)"
+         scs)
   
   (for/fold ([stx stx])
             ([sc scs])
     (internal-definition-context-add-scopes sc stx)))
 
-(define (splice-from-scope id sc)
-  (unless (identifier? id)
-    (raise-argument-error
-     'splice-from-scope
-     "identifier?"
-     id))
-  (unless (internal-definition-context? sc)
-    (raise-argument-error
-     'splice-from-scope
-     "internal-definition-context?"
-     sc))
+(define/who (splice-from-scope id sc)
+  (check who identifier? id)
+  (check who internal-definition-context? sc)
+  
   (internal-definition-context-splice-binding-identifier sc id))
 
 (define (add-ctx-scope ctx stx)
@@ -144,12 +131,11 @@
 
 (struct racket-var [])
 
-(define (bind! id rhs-arg #:space [binding-space #f])
-  (unless (or (identifier? id) (and (list? id) (andmap identifier? id)))
-    (raise-argument-error
-     'bind!
-     "(or/c identifier? (listof identifier?))"
-     id))
+(define/who (bind! id rhs-arg #:space [binding-space #f])
+  (check who (lambda (v) (or (identifier? v) (and (list? v) (andmap identifier? v))))
+         #:contract "(or/c identifier? (listof identifier?))"
+         id)
+
   (unless (current-ctx-id)
     (error 'bind!
            "cannot bind outside of dynamic extent of with-scope"))
@@ -160,9 +146,11 @@
     (error 'bind! "environment value must not be #f"))
 
   (define rhs
-    (if (racket-var? rhs-arg)
-        #f
-        #`'#,rhs-arg))
+    (if (syntax? rhs-arg)
+        rhs-arg
+        (if (racket-var? rhs-arg)
+            #f
+            #`'#,rhs-arg)))
 
   ;; Adjust scopes manually rather than use the result of syntax-local-bind-syntaxes
   ;; so that we can check that the names are not already bound.
@@ -196,7 +184,9 @@
     (when (member id ctx-bound-ids bound-identifier=?)
       (wrong-syntax id "identifier already defined"))))
 
-(define (eval-transformer stx)
+(define/who (eval-transformer stx)
+  (check who syntax? stx)
+  
   (syntax-local-eval stx (or (current-def-ctx) '())))
 
 ; used only for eq? equality.
@@ -205,12 +195,8 @@
     (struct unbound [])
     (unbound)))
 
-(define (lookup id [predicate (lambda (v) #t)] #:space [binding-space #f])
-  (unless (identifier? id)
-    (raise-argument-error
-     'lookup
-     "identifier?"
-     id))
+(define/who (lookup id [predicate (lambda (v) #t)] #:space [binding-space #f])
+  (check who identifier? id)
 
   (define id-in-sc ((in-space binding-space) (add-ctx-scope (current-def-ctx) id)))
   (define result
@@ -228,30 +214,21 @@
         result)
       #f))
 
-(define (syntax-local-introduce-splice stx)
+(define/who (syntax-local-introduce-splice stx)
+  (check who identifier? stx)
+  
   (syntax-local-identifier-as-binding
    (syntax-local-introduce stx)
    (current-def-ctx)))
 
-(define (apply-as-transformer f f-id ctx-type-arg . args)
-  (unless (procedure? f)
-    (raise-argument-error
-     'apply-as-transformer
-     "procedure?"
-     f))
-
-  (unless (or (identifier? f-id)
-              (not f-id))
-    (raise-argument-error
-     'apply-as-transformer
-     "(or/c identifier? #f)"
-     f-id))
-  
-  (unless (member ctx-type-arg '(expression definition))
-    (raise-argument-error
-     'apply-as-transformer
-     "(or/c 'expression 'definition)"
-     ctx-type-arg))
+(define/who (apply-as-transformer f f-id ctx-type-arg . args)
+  (check who procedure? f)
+  (check who (lambda (v) (or (identifier? v) (not v)))
+         #:contract "(or/c identifier? #f)"
+         f-id)
+  (check who (lambda (v) (member v '(expression definition)))
+         #:contract "(or/c 'expression 'definition)"
+         ctx-type-arg)
 
   (apply-with-hygiene f f-id ctx-type-arg #t args))
 
@@ -281,7 +258,12 @@
            def-ctx
            args)))
 
-(define (wrap-hygiene f ctx-type)
+(define/who (wrap-hygiene f ctx-type)
+  (check who procedure? f)
+  (check who (lambda (v) (or (eq? v 'expression) (eq? v 'definition)))
+         #:contract "(or/c 'expression 'definition)"
+         ctx-type)
+  
   (lambda args
     ; Hack: Provide a name from racket/base (which we require for-template)
     ; as binding-id to avoid creation of use-site scopes for define/hygienic.
@@ -298,9 +280,9 @@
 (begin-for-syntax
   (define-syntax-class ctx-type
     (pattern #:expression
-             #:attr type #''expression)
+      #:attr type #''expression)
     (pattern #:definition
-             #:attr type #''definition)))
+      #:attr type #''definition)))
 
 (define-syntax define/hygienic
   (syntax-parser
@@ -327,7 +309,10 @@
 ; Applies the function f to each element of the tree, starting
 ; from the leaves. For nodes wrapped as a syntax object, the function
 ; is applied to the syntax object but not its immediate datum contents.
-(define (map-transform f stx)
+(define/who (map-transform f stx)
+  (check who procedure? f)
+  (check who syntax? stx)
+  
   (define (recur stx)
     (cond
       [(syntax? stx)
@@ -351,77 +336,92 @@
    (syntax-local-get-shadower id)
    'add))
 
-(define (compile-binder! table id)
-  (unless (mutable-free-id-table? table)
-    (raise-argument-error
-     'compile-binder!
-     "mutable-free-id-table?"
-     table))
-  (unless (identifier? id)
-    (raise-argument-error
-     'compile-binder!
-     "identifier?"
-     id))
+(define/who (compile-binder! table id)
+  (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
+         table)
+  (check who identifier? id)
     
   (define result (generate-temporary id))
 
-  (free-id-table-set! table
-                      (flip-intro-scope id)
-                      result)
+  (if (persistent-free-id-table? table)
+      (persistent-free-id-table-set! table (flip-intro-scope id) result)
+      (free-id-table-set! table
+                          (flip-intro-scope id)
+                          result))
   
   (flip-intro-scope
    result))
 
-(define (compile-reference table id)
-  (unless (mutable-free-id-table? table)
-    (raise-argument-error
-     'compile-reference
-     "mutable-free-id-table?"
-     table))
-  (unless (identifier? id)
-    (raise-argument-error
-     'compile-reference
-     "identifier?"
-     id))
+(define (compile-binders! table ids)
+  (map (lambda (id) (compile-binder! table id))
+       (if (syntax? ids)
+           (syntax->list ids)
+           ids)))
+
+(define/who (compile-reference table id)
+  (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
+         table)
+  (check who identifier? id)
 
   (define table-val
-    (free-id-table-ref
-     table
-     (flip-intro-scope id)))
+    (if (persistent-free-id-table? table)
+        (persistent-free-id-table-ref
+         table
+         (flip-intro-scope id))
+        (free-id-table-ref
+         table
+         (flip-intro-scope id))))
   
   (syntax-local-get-shadower/including-module
    (flip-intro-scope
     table-val)))
 
-(define ((in-space binding-space) stx)
-  (if binding-space
-      (let ([sym (if (symbol? binding-space)
-                     binding-space
-                     (syntax-e binding-space))])
-        ((make-interned-syntax-introducer sym) stx 'add))
-      stx))
+(define/who (in-space binding-space)
+  (check who (lambda (v) (or (symbol? v) (identifier? v) (not v)))
+         #:contract "(or/c symbol? identifier? #f)"
+         binding-space)
+  
+  (lambda (stx)
+    (check who syntax? stx)
+    
+    (if binding-space
+        (let ([sym (if (symbol? binding-space)
+                       binding-space
+                       (syntax-e binding-space))])
+          ((make-interned-syntax-introducer sym) stx 'add))
+        stx)))
 
-(define (module-macro t)
+(define/who (module-macro t)
+  (check who procedure? t)
+  
   (lambda (stx)
     (case (syntax-local-context)
       [(module-begin) #`(begin #,stx)]
       [(module) (t stx)]
       [else (raise-syntax-error #f "Only allowed in module context" stx)])))
 
-(define (non-module-begin-macro t)
+(define/who (non-module-begin-macro t)
   (lambda (stx)
+    (check who procedure? t)
+    
     (case (syntax-local-context)
       [(module-begin) #`(begin #,stx)]
       [else (t stx)])))
 
-(define (definition-macro t)
+(define/who (definition-macro t)
+  (check who procedure? t)
+  
   (lambda (stx)
     (case (syntax-local-context)
       [(module-begin) #`(begin #,stx)]
       [(expression) (raise-syntax-error #f "Only allowed in a definition context" stx)]
       [else (t stx)])))
 
-(define (expression-macro t)
+(define/who (expression-macro t)
+  (check who procedure? t)
+  
   (lambda (stx)
     (case (syntax-local-context)
       [(expression) (t stx)]

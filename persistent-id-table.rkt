@@ -2,8 +2,11 @@
 
 (require
   racket/base
+  racket/set
+  racket/private/check
   syntax/id-table
   (for-template racket/base)
+  (for-syntax racket/base syntax/parse)
   "private/flip-intro-scope.rkt")
 
 (provide
@@ -11,10 +14,11 @@
  persistent-free-id-table?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
- persist-free-id-table-extensions!)
+ persist-free-id-table-extensions!
+ wrap-persist)
 
 ; Design note: we can't persist via a lift because that'd end up at the end of the module,
-; so entries wouldn't be available during module visit until ithe end of the module
+; so entries wouldn't be available during module visit until the end of the module
 ; is reached.
 
 (struct persistent-free-id-table [persisted transient id])
@@ -25,13 +29,23 @@
    (make-free-id-table)
    id))
 
-(define (persistent-free-id-table-set! t id val)
+(define tables-needing-persist (mutable-seteq))
+
+(define/who (persistent-free-id-table-set! t id val)
+  (check who persistent-free-id-table? t)
+  (check who identifier? id)
+  (check who syntax? val)
+  
+  (set-add! tables-needing-persist t)
   (free-id-table-set! (persistent-free-id-table-transient t) id val))
 
 (define (ref-error)
   (error 'persistent-free-id-table-ref "no value found for key"))
 
-(define (persistent-free-id-table-ref t id [fail ref-error])
+(define/who (persistent-free-id-table-ref t id [fail ref-error])
+  (check who persistent-free-id-table? t)
+  (check who identifier? id)
+
   (define (try-persistent)
     (free-id-table-ref
      (persistent-free-id-table-persisted t)
@@ -46,16 +60,45 @@
   (for ([pair alist])
     (free-id-table-set! p (car pair) (cdr pair))))
 
-(define (persist-free-id-table-extensions! t)
+(define/who (persist-free-id-table-extensions! t)
+  (check who persistent-free-id-table? t)
+  
   (define alist
     (for/list ([(k v) (in-free-id-table (persistent-free-id-table-transient t))])
-      #`(cons #'#,(flip-intro-scope k) '#,v)))
+      #`(cons #'#,(flip-intro-scope k) #'#,(flip-intro-scope v))))
   #`(begin-for-syntax
       (do-extension! #,(persistent-free-id-table-id t)
                      (list . #,alist))))
 
-(define-syntax-rule (define-persistent-free-id-table v)
-  (define v (make-persistent-free-id-table #'v)))
+(define (persist-all-free-id-table-extensions!)
+  (define result
+    #`(begin
+        #,@(for/list ([t tables-needing-persist])
+             (persist-free-id-table-extensions! t))))
+  (set-clear! tables-needing-persist)
+  result)
+
+(define/who (wrap-persist transformer)
+  (check who procedure? transformer)
+  
+  (lambda (stx)
+    (check 'wrap-persist-transformer syntax? stx)
+    
+    (unless (eq? 'module (syntax-local-context))
+      (error 'wrap-persist-transformer "wrap-persist transformer may only be used in module context"))
+    
+    (define t-result (transformer stx))
+    (check 'wrap-persist-transformer syntax? t-result)
+    #`(begin
+        #,t-result
+        #,(persist-all-free-id-table-extensions!))))
+
+(define-syntax define-persistent-free-id-table
+  (syntax-parser
+    [(_ name:id)
+     (unless (eq? 'module (syntax-local-context))
+       (raise-syntax-error #f "only allowed in module context" this-syntax))
+     #'(define name (make-persistent-free-id-table (quote-syntax name)))]))
 
 (module* test racket/base
   (require
@@ -69,15 +112,15 @@
     (define-persistent-free-id-table v))
 
   (define-syntax (m1 stx)
-    (persistent-free-id-table-set! v #'x 5)
+    (persistent-free-id-table-set! v #'x #'5)
     #'(void))
   (m1)
 
   (define-syntax (m2 stx)
-    #`#,(persistent-free-id-table-ref v #'x))
+    #`#'#,(persistent-free-id-table-ref v #'x))
 
   (check-equal?
-   (m2)
+   (syntax->datum (m2))
    5)
   
   (define-syntax (m3 stx)
@@ -94,6 +137,6 @@
   
   (begin-for-syntax
     (check-equal?
-     (persistent-free-id-table-ref v #'x)
+     (syntax->datum (persistent-free-id-table-ref v #'x))
      5))
   )

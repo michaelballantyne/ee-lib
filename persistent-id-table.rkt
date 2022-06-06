@@ -3,6 +3,7 @@
 (require
   racket/base
   racket/set
+  racket/prefab
   racket/private/check
   syntax/id-table
   (for-template racket/base)
@@ -10,12 +11,25 @@
   "private/flip-intro-scope.rkt")
 
 (provide
+ simple-datum?
  define-persistent-free-id-table
  persistent-free-id-table?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
  persist-free-id-table-extensions!
  wrap-persist)
+
+(define (simple-datum? v)
+  (or (null? v)
+      (symbol? v)
+      (boolean? v)
+      (number? v)
+      (and (pair? v) (simple-datum? (car v)) (simple-datum? (cdr v)))
+      (and (vector? v) (for/and ([el v]) (simple-datum? el)))
+      (and (box? v) (simple-datum? (unbox v)))
+      (and (hash? v) (for/and ([(k v) v]) (and (simple-datum? k) (simple-datum? v))))
+      (and (immutable-prefab-struct-key v) (for/and ([el (in-vector (struct->vector v) 1)])
+                                             (simple-datum? el)))))
 
 ; Design note: we can't persist via a lift because that'd end up at the end of the module,
 ; so entries wouldn't be available during module visit until the end of the module
@@ -34,7 +48,9 @@
 (define/who (persistent-free-id-table-set! t id val)
   (check who persistent-free-id-table? t)
   (check who identifier? id)
-  (check who syntax? val)
+  (check who (lambda (v) (or (syntax? v) (simple-datum? v)))
+         #:contract "(or/c syntax? simple-datum?)"
+         val)
   
   (set-add! tables-needing-persist t)
   (free-id-table-set! (persistent-free-id-table-transient t) id val))
@@ -65,7 +81,9 @@
   
   (define alist
     (for/list ([(k v) (in-free-id-table (persistent-free-id-table-transient t))])
-      #`(cons #'#,(flip-intro-scope k) #'#,(flip-intro-scope v))))
+      #`(cons #'#,(flip-intro-scope k) #,(if (syntax? v)
+                                             #`#'#,(flip-intro-scope v)
+                                             #`'#,v))))
   #`(begin-for-syntax
       (do-extension! #,(persistent-free-id-table-id t)
                      (list . #,alist))))
@@ -112,7 +130,7 @@
     (define-persistent-free-id-table v))
 
   (define-syntax (m1 stx)
-    (persistent-free-id-table-set! v #'x #'5)
+    (persistent-free-id-table-set! v #'x 5)
     #'(void))
   (m1)
 
@@ -137,6 +155,6 @@
   
   (begin-for-syntax
     (check-equal?
-     (syntax->datum (persistent-free-id-table-ref v #'x))
+     (persistent-free-id-table-ref v #'x)
      5))
   )

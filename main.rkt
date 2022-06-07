@@ -16,6 +16,7 @@
    (only-in syntax/parse [define/syntax-parse def/stx]))
   (for-template racket/base)
 
+  "private/binding.rkt"
   "private/flip-intro-scope.rkt"
   "persistent-id-table.rkt")
 
@@ -59,19 +60,6 @@
  expression-macro
  definition-macro
  )
-
-(define (bound? id)
-  (identifier-binding id (syntax-local-phase-level) #t))
-
-(define/who (same-binding? id1 id2)
-  (check who identifier? id1)
-  (check who identifier? id2)
-  
-  (let ([id1-ext (if (syntax-transforming?) (flip-intro-scope id1) id1)]
-        [id2-ext (if (syntax-transforming?) (flip-intro-scope id2) id2)])
-    (and (bound? id1-ext)
-         (bound? id2-ext)
-         (free-identifier=? id1-ext id2-ext))))
 
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()

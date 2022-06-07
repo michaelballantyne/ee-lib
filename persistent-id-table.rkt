@@ -3,33 +3,27 @@
 (require
   racket/base
   racket/set
-  racket/prefab
   racket/private/check
   syntax/id-table
   (for-template racket/base)
   (for-syntax racket/base syntax/parse)
-  "private/flip-intro-scope.rkt")
+  "private/flip-intro-scope.rkt"
+  "private/syntax-datum.rkt"
+  "private/binding.rkt")
 
 (provide
- simple-datum?
+ syntax-datum?
  define-persistent-free-id-table
  persistent-free-id-table?
+ persistent-free-id-table-context?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
- persist-free-id-table-extensions!
  wrap-persist)
 
-(define (simple-datum? v)
-  (or (null? v)
-      (symbol? v)
-      (boolean? v)
-      (number? v)
-      (and (pair? v) (simple-datum? (car v)) (simple-datum? (cdr v)))
-      (and (vector? v) (for/and ([el v]) (simple-datum? el)))
-      (and (box? v) (simple-datum? (unbox v)))
-      (and (hash? v) (for/and ([(k v) v]) (and (simple-datum? k) (simple-datum? v))))
-      (and (immutable-prefab-struct-key v) (for/and ([el (in-vector (struct->vector v) 1)])
-                                             (simple-datum? el)))))
+(define persistent-free-id-table-context-param (make-parameter #f))
+
+(define (persistent-free-id-table-context?)
+  (persistent-free-id-table-context-param))
 
 ; Design note: we can't persist via a lift because that'd end up at the end of the module,
 ; so entries wouldn't be available during module visit until the end of the module
@@ -47,20 +41,27 @@
 
 (define/who (persistent-free-id-table-set! t id val)
   (check who persistent-free-id-table? t)
-  (check who identifier? id)
-  (check who (lambda (v) (or (syntax? v) (simple-datum? v)))
-         #:contract "(or/c syntax? simple-datum?)"
+  (check who identifier-with-binding? id)
+  (check who (lambda (v) (or (syntax? v) (syntax-datum? v)))
+         #:contract "(or/c syntax? syntax-datum?)"
          val)
+
+  (if (module-or-top-binding? id)
+      (begin
+        (unless (persistent-free-id-table-context?)
+          (error 'persistent-free-id-table-set!
+                 "not in a persist context"))
   
-  (set-add! tables-needing-persist t)
-  (free-id-table-set! (persistent-free-id-table-transient t) id val))
+        (set-add! tables-needing-persist t)
+        (free-id-table-set! (persistent-free-id-table-transient t) id val))
+      (free-id-table-set! (persistent-free-id-table-persisted t) id val)))
 
 (define (ref-error)
   (error 'persistent-free-id-table-ref "no value found for key"))
 
 (define/who (persistent-free-id-table-ref t id [fail ref-error])
   (check who persistent-free-id-table? t)
-  (check who identifier? id)
+  (check who identifier-with-binding? id)
 
   (define (try-persistent)
     (free-id-table-ref
@@ -101,15 +102,15 @@
   
   (lambda (stx)
     (check 'wrap-persist-transformer syntax? stx)
-    
-    (unless (eq? 'module (syntax-local-context))
-      (error 'wrap-persist-transformer "wrap-persist transformer may only be used in module context"))
-    
-    (define t-result (transformer stx))
-    (check 'wrap-persist-transformer syntax? t-result)
-    #`(begin
-        #,t-result
-        #,(persist-all-free-id-table-extensions!))))
+
+    (if (member (syntax-local-context) '(module top-level))
+        (let ([t-result (parameterize ([persistent-free-id-table-context-param #t])
+                          (transformer stx))])
+          (check 'wrap-persist-transformer syntax? t-result)
+          #`(begin
+              #,t-result
+              #,(persist-all-free-id-table-extensions!)))
+        (transformer stx))))
 
 (define-syntax define-persistent-free-id-table
   (syntax-parser
@@ -129,32 +130,34 @@
   (begin-for-syntax
     (define-persistent-free-id-table v))
 
-  (define-syntax (m1 stx)
-    (persistent-free-id-table-set! v #'x 5)
-    #'(void))
+  (define x #f)
+  (define y #f)
+  
+  (define-syntax m1
+    (wrap-persist
+     (lambda (stx)
+       (persistent-free-id-table-set! v #'x 5)
+       #'(void))))
   (m1)
 
-  (define-syntax (m2 stx)
-    #`#'#,(persistent-free-id-table-ref v #'x))
-
+  ;; Available during expansion
+  (define-syntax m2
+    (lambda (stx)
+      #`#,(persistent-free-id-table-ref v #'x)))
   (check-equal?
-   (syntax->datum (m2))
+   (m2)
    5)
-  
-  (define-syntax (m3 stx)
-    (persist-free-id-table-extensions! v))
 
-  (m3)
-
-  (define-syntax (m5 stx)
-    #`#,(persistent-free-id-table-ref v #'y #f))
-
-  (check-equal?
-   (m5)
-   #f)
-  
+  ;; Available at visit-time
   (begin-for-syntax
     (check-equal?
      (persistent-free-id-table-ref v #'x)
      5))
+
+  ;; Default value works
+  (define-syntax (m5 stx)
+    #`#,(persistent-free-id-table-ref v #'y #f))
+  (check-equal?
+   (m5)
+   #f)
   )

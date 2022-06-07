@@ -16,6 +16,7 @@
  define-persistent-free-id-table
  persistent-free-id-table?
  persistent-free-id-table-context?
+ persistent-free-id-table-has-key?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
  wrap-persist)
@@ -46,6 +47,9 @@
          #:contract "(or/c syntax? syntax-datum?)"
          val)
 
+  (when (persistent-free-id-table-has-key? t id)
+    (error 'persistent-free-id-table-set! "table already has an entry for key"))
+  
   (if (module-or-top-binding? id)
       (begin
         (unless (persistent-free-id-table-context?)
@@ -55,6 +59,13 @@
         (set-add! tables-needing-persist t)
         (free-id-table-set! (persistent-free-id-table-transient t) id val))
       (free-id-table-set! (persistent-free-id-table-persisted t) id val)))
+
+(define/who (persistent-free-id-table-has-key? t id)
+  (check who persistent-free-id-table? t)
+  (check who identifier-with-binding? id)
+
+  (define unbound-value (gensym))
+  (not (eq? unbound-value (persistent-free-id-table-ref t id (lambda () unbound-value)))))
 
 (define (ref-error)
   (error 'persistent-free-id-table-ref "no value found for key"))

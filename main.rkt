@@ -123,6 +123,7 @@
   (check who (lambda (v) (or (identifier? v) (and (list? v) (andmap identifier? v))))
          #:contract "(or/c identifier? (listof identifier?))"
          id)
+  (check who symbol? #:or-false binding-space)
 
   (unless (current-ctx-id)
     (error 'bind!
@@ -185,6 +186,8 @@
 
 (define/who (lookup id [predicate (lambda (v) #t)] #:space [binding-space #f])
   (check who identifier? id)
+  (check who procedure? predicate)
+  (check who symbol? #:or-false binding-space)
 
   (define id-in-sc ((in-space binding-space) (add-ctx-scope (current-def-ctx) id)))
   (define result
@@ -371,18 +374,13 @@
     table-val)))
 
 (define/who (in-space binding-space)
-  (check who (lambda (v) (or (symbol? v) (identifier? v) (not v)))
-         #:contract "(or/c symbol? identifier? #f)"
-         binding-space)
+  (check who symbol? #:or-false binding-space)
   
   (lambda (stx)
     (check who syntax? stx)
     
     (if binding-space
-        (let ([sym (if (symbol? binding-space)
-                       binding-space
-                       (syntax-e binding-space))])
-          ((make-interned-syntax-introducer sym) stx 'add))
+        ((make-interned-syntax-introducer binding-space) stx 'add)
         stx)))
 
 (define/who (module-macro t)

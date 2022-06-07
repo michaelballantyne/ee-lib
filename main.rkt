@@ -324,13 +324,17 @@
    (syntax-local-get-shadower id)
    'add))
 
+(define/who (generate-same-name-temporary id)
+  (check who identifier? id)
+  ((make-syntax-introducer) (datum->syntax #f (syntax-e id) id id)))
+
 (define/who (compile-binder! table id)
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          table)
   (check who identifier? id)
     
-  (define result (generate-temporary id))
+  (define result (generate-same-name-temporary id))
 
   (if (persistent-free-id-table? table)
       (persistent-free-id-table-set! table (flip-intro-scope id) result)
@@ -404,7 +408,7 @@
   (lambda (stx)
     (case (syntax-local-context)
       [(module-begin) #`(begin #,stx)]
-      [(expression) (raise-syntax-error #f "Only allowed in a definition context" stx)]
+      [(expression) (raise-syntax-error #f "only allowed in a definition context" stx)]
       [else (t stx)])))
 
 (define/who (expression-macro t)

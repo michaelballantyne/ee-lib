@@ -302,7 +302,6 @@
 ; is applied to the syntax object but not its immediate datum contents.
 (define/who (map-transform f stx)
   (check who procedure? f)
-  (check who syntax? stx)
   
   (define (recur stx)
     (cond

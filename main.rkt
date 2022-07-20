@@ -330,7 +330,10 @@
   (check who identifier? id)
   ((make-syntax-introducer) (datum->syntax #f (syntax-e id) id id)))
 
-(define/who (compile-binder! table id)
+
+(define-persistent-free-id-table compiled-ids)
+
+(define/who (compile-binder! id #:table [table compiled-ids])
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          table)
@@ -347,13 +350,13 @@
   (flip-intro-scope
    result))
 
-(define (compile-binders! table ids)
-  (map (lambda (id) (compile-binder! table id))
+(define (compile-binders! ids #:table [table compiled-ids])
+  (map (lambda (id) (compile-binder! id #:table table))
        (if (syntax? ids)
            (syntax->list ids)
            ids)))
 
-(define/who (compile-reference table id)
+(define/who (compile-reference id #:table [table compiled-ids])
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          table)

@@ -41,19 +41,17 @@
        #'x]
       [(myrkt e (~optional _))
        (qstx/rc (myrkt e #,(current-def-ctx)))]))
-
-  (define symtable (make-free-id-table))
   
   (define (my-compile stx)
     (syntax-parse stx
       #:literal-sets (mylang-literals)
       [(mylanglet v b)
-       (def/stx v^ (compile-binder! symtable #'v))
+       (def/stx v^ (compile-binder! #'v))
        #`(let ([v^ 'v]) #,(my-compile #'b))]
       [(mycons e1 e2)
        #`(cons #,(my-compile #'e1) #,(my-compile #'e2))]
       [x:id
-       (compile-reference symtable #'x)]
+       (compile-reference #'x)]
       [(myrkt e ctx)
        #'(resumption e ctx)]
       )))

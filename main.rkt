@@ -49,6 +49,7 @@
  map-transform
  syntax-local-introduce-splice
 
+ compiled-ids
  compile-binder!
  compile-binders!
  compile-reference

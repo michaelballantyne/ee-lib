@@ -26,6 +26,7 @@
 
  qstx/rc ; read as quasisyntax/loc+props
  qstx/lp
+ stx/lp
 
  bind!
  racket-var
@@ -65,9 +66,19 @@
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()
     [(_ arg template)
-     #`(let ([orig arg])
-         (datum->syntax (quote-syntax #,stx)
-                        (syntax-e (quasisyntax template))
+     #`(let ([orig arg]
+             [stx (quasisyntax template)])
+         (datum->syntax stx
+                        (syntax-e stx)
+                        orig orig))]))
+
+(define-syntax (stx/lp stx)
+  (syntax-case stx ()
+    [(_ arg template)
+     #`(let ([orig arg]
+             [stx (syntax template)])
+         (datum->syntax stx
+                        (syntax-e stx)
                         orig orig))]))
 
 (define-syntax (qstx/rc stx)

@@ -328,9 +328,20 @@
       [else stx]))
   (f (recur stx)))
 
+(module get-module-inside-edge racket/base
+  (provide get-module-inside-edge-m)
+  (require (for-syntax racket/base))
+  (define-syntax (get-module-inside-edge-m stx)
+    #`(quote-syntax
+       #,(syntax-local-introduce
+          (datum->syntax #f 'get-module-inside-edge-introducer/id)))))
+
+(require 'get-module-inside-edge)
+
 (define (get-module-inside-edge-introducer)
   (make-syntax-delta-introducer
-   (eval-syntax #`#'#,(datum->syntax #f 'get-module-inside-edge-introducer/id))
+   (syntax-parse (expand-syntax #'(get-module-inside-edge-m))
+     [(quote-syntax id) #'id])
    (datum->syntax #f 'get-module-inside-edge-introducer/id)))
 
 (define (syntax-local-get-shadower/including-module id)

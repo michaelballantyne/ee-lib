@@ -356,25 +356,45 @@
 
 (define-persistent-free-id-table compiled-ids)
 
-(define/who (compile-binder! id #:table [table compiled-ids])
+(define (table-ref table id fail)
+  (if (persistent-free-id-table? table)
+        (persistent-free-id-table-ref
+         table
+         (flip-intro-scope id)
+         fail)
+        (free-id-table-ref
+         table
+         (flip-intro-scope id)
+         fail)))
+
+(define (table-set! table id val)
+  (if (persistent-free-id-table? table)
+      (persistent-free-id-table-set! table (flip-intro-scope id) val)
+      (free-id-table-set! table
+                          (flip-intro-scope id)
+                          val)))
+
+(define/who (compile-binder! id #:table [table compiled-ids] #:reuse? [reuse? #f])
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          table)
   (check who identifier? id)
-    
-  (define result (generate-same-name-temporary id))
+  (check who boolean? reuse?)
 
-  (if (persistent-free-id-table? table)
-      (persistent-free-id-table-set! table (flip-intro-scope id) result)
-      (free-id-table-set! table
-                          (flip-intro-scope id)
-                          result))
-  
-  (flip-intro-scope
-   result))
 
-(define (compile-binders! ids #:table [table compiled-ids])
-  (map (lambda (id) (compile-binder! id #:table table))
+
+  (define ref-result (table-ref table id #f))
+
+  (if ref-result
+      (if reuse?
+          (flip-intro-scope ref-result)
+          (error 'compile-binder! "compiled binder already recorded for identifier ~v" id))
+      (let ([result (generate-same-name-temporary id)])
+        (table-set! table id result)
+        (flip-intro-scope result))))
+
+(define (compile-binders! ids #:table [table compiled-ids] #:reuse? [reuse? #f])
+  (map (lambda (id) (compile-binder! id #:table table #:reuse? reuse?))
        (if (syntax? ids)
            (syntax->list ids)
            ids)))
@@ -386,13 +406,7 @@
   (check who identifier? id)
 
   (define table-val
-    (if (persistent-free-id-table? table)
-        (persistent-free-id-table-ref
-         table
-         (flip-intro-scope id))
-        (free-id-table-ref
-         table
-         (flip-intro-scope id))))
+    (table-ref table id (lambda () (error 'compile-reference "no compiled name in table for ~v" id))))
   
   (syntax-local-get-shadower/including-module
    (flip-intro-scope

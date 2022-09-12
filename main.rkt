@@ -200,16 +200,17 @@
   (check who identifier? id)
   (check who procedure? predicate)
   (check who symbol? #:or-false binding-space)
-
+  
   (define id-in-sc ((in-space binding-space) (add-ctx-scope (current-def-ctx) id)))
+
   (define result
     (syntax-local-value
      id-in-sc
      (lambda () unbound)
      (current-def-ctx)))
 
-  (when (not result)
-    (error 'lookup "invariant violated; got #f from environment lookup"))
+  (when (eq? result unbound)
+    (maybe-raise-ambiguity-error id-in-sc))
 
   (if (and (not (eq? result unbound)) (predicate result))
       (begin

@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require
-  syntax/apply-transformer
+(require 
   racket/syntax
   syntax/parse
   syntax/parse/define
@@ -12,7 +11,6 @@
   (for-syntax
    racket/base
    syntax/parse
-   racket/syntax
    (only-in syntax/parse [define/syntax-parse def/stx]))
   (for-template racket/base)
 

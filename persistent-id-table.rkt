@@ -2,7 +2,6 @@
 
 (require
   racket/base
-  racket/set
   racket/private/check
   syntax/id-table
   (for-template racket/base)
@@ -38,7 +37,7 @@
    (make-free-id-table)
    id))
 
-(define tables-needing-persist (mutable-seteq))
+(define tables-needing-persist (make-hasheq))
 
 (define/who (persistent-free-id-table-set! t id val)
   (check who persistent-free-id-table? t)
@@ -56,7 +55,7 @@
           (error 'persistent-free-id-table-set!
                  "not in a persist context"))
   
-        (set-add! tables-needing-persist t)
+        (hash-set! tables-needing-persist t #t)
         (free-id-table-set! (persistent-free-id-table-transient t) id val))
       (free-id-table-set! (persistent-free-id-table-persisted t) id val)))
 
@@ -103,9 +102,9 @@
 (define (persist-all-free-id-table-extensions!)
   (define result
     #`(begin
-        #,@(for/list ([t tables-needing-persist])
+        #,@(for/list ([(t _) tables-needing-persist])
              (persist-free-id-table-extensions! t))))
-  (set-clear! tables-needing-persist)
+  (hash-clear! tables-needing-persist)
   result)
 
 (define/who (wrap-persist transformer)

@@ -52,6 +52,11 @@
  compile-binder!
  compile-binders!
  compile-reference
+ compiled-from
+
+ define-symbol-table
+ symbol-table-set!
+ symbol-table-ref
 
  in-space
 
@@ -61,6 +66,8 @@
  definition-macro
  )
 
+;; TODO / bug: when the template is just a reference to a pattern variable,
+;; these change the source location and properties on the result.
 (define-syntax (qstx/lp stx)
   (syntax-case stx ()
     [(_ arg template)
@@ -380,17 +387,18 @@
   (check who identifier? id)
   (check who boolean? reuse?)
 
-
-
   (define ref-result (table-ref table id #f))
 
-  (if ref-result
-      (if reuse?
-          (flip-intro-scope ref-result)
-          (error 'compile-binder! "compiled binder already recorded for identifier ~v" id))
-      (let ([result (generate-same-name-temporary id)])
-        (table-set! table id result)
-        (flip-intro-scope result))))
+  (define renamed
+    (if ref-result
+        (if reuse?
+            (flip-intro-scope ref-result)
+            (error 'compile-binder! "compiled binder already recorded for identifier ~v" id))
+        (let ([result (generate-same-name-temporary id)])
+          (table-set! table id result)
+          (flip-intro-scope result))))
+
+  (syntax-property renamed 'compiled-from (flip-intro-scope id)))
 
 (define (compile-binders! ids #:table [table compiled-ids] #:reuse? [reuse? #f])
   (map (lambda (id) (compile-binder! id #:table table #:reuse? reuse?))
@@ -407,9 +415,31 @@
   (define table-val
     (table-ref table id (lambda () (error 'compile-reference "no compiled name in table for ~v" id))))
   
-  (syntax-local-get-shadower/including-module
-   (flip-intro-scope
-    table-val)))
+  (define renamed
+    (syntax-local-get-shadower/including-module
+     (flip-intro-scope
+      table-val)))
+
+  (syntax-property renamed 'compiled-from (flip-intro-scope id)))
+
+(define/who (compiled-from id)
+  (define prop (syntax-property id 'compiled-from))
+  (when (not prop)
+    (raise-syntax-error 'compiled-from "not a compiled identifier" id))
+  (flip-intro-scope prop))
+
+(define-syntax-rule
+  (define-symbol-table id)
+  (define-persistent-free-id-table id))
+
+(define (symbol-table-set! t id val)
+  (persistent-free-id-table-set! t (compiled-from id) val))
+
+(define (symbol-table-ref-error)
+  (error 'symbol-table-ref "no value found for key"))
+
+(define (symbol-table-ref t id [fail symbol-table-ref-error])
+  (persistent-free-id-table-ref t (compiled-from id) symbol-table-ref-error))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

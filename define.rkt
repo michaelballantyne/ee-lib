@@ -6,7 +6,8 @@
    (rename-in syntax/parse [define/syntax-parse def/stx])
    racket/syntax
    racket/generic
-   ee-lib))
+   ee-lib
+   "syntax-category.rkt"))
 
 (provide
  define-literal-forms
@@ -15,7 +16,10 @@
 (begin-for-syntax
   (define-syntax-class symbol
     (pattern stx:id
-      #:attr sym (syntax-e (attribute stx)))))
+      #:attr sym (syntax-e (attribute stx))))
+  (struct literal-rep [msg]
+    #:property prop:procedure (lambda (s stx) (raise-syntax-error #f (literal-rep-msg s) stx))
+    #:property prop:not-racket-syntax #t))
 
 (define-syntax define-literal-forms
   (module-macro
@@ -23,12 +27,10 @@
      [(_ literal-set-name:id
          (~optional (~seq #:syntax-class syntax-class-name:id))
          (~optional (~seq #:binding-space (~or space:symbol #f)))
-         msg:expr (name:id ...))
+         msg:string (name:id ...))
       #:with (spaced-name ...) (map (in-space (attribute space.sym)) (attribute name))
       #'(begin
-          (define-for-syntax (expand-to-error stx)
-            (raise-syntax-error #f msg stx))
-          (define-syntax spaced-name expand-to-error)
+          (define-syntax spaced-name (literal-rep 'msg))
           ...
           (begin-for-syntax
             (define-literal-set literal-set-name

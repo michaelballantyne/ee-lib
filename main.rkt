@@ -54,7 +54,9 @@
  compile-reference
  compiled-from
 
- define-symbol-table
+ define-persistent-symbol-table
+ define-local-symbol-table
+ 
  symbol-table-set!
  symbol-table-ref
 
@@ -429,17 +431,35 @@
   (flip-intro-scope prop))
 
 (define-syntax-rule
-  (define-symbol-table id)
+  (define-persistent-symbol-table id)
   (define-persistent-free-id-table id))
 
-(define (symbol-table-set! t id val)
-  (persistent-free-id-table-set! t (compiled-from id) val))
+(define-syntax-rule
+  (define-local-symbol-table id)
+  (define id (make-free-id-table)))
+
+(define/who (symbol-table-set! t id val)
+  (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
+         t)
+  
+  (when (and (free-id-table? t) (module-or-top-binding? (compiled-from id)))
+    (error who "local symbol tables cannot store information about module-level bindings"))
+
+  (when (not (eq? unbound (symbol-table-ref t id unbound)))
+    (error who "table already has an entry for key"))
+  
+  (table-set! t (compiled-from id) val))
 
 (define (symbol-table-ref-error)
   (error 'symbol-table-ref "no value found for key"))
 
-(define (symbol-table-ref t id [fail symbol-table-ref-error])
-  (persistent-free-id-table-ref t (compiled-from id) fail))
+(define/who (symbol-table-ref t id [fail symbol-table-ref-error])
+  (check who (lambda (v) (or (free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c free-id-table? persistent-free-id-table?)"
+         t)
+  
+  (table-ref t (compiled-from id) fail))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

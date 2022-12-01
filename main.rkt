@@ -439,7 +439,7 @@
   (error 'symbol-table-ref "no value found for key"))
 
 (define (symbol-table-ref t id [fail symbol-table-ref-error])
-  (persistent-free-id-table-ref t (compiled-from id) symbol-table-ref-error))
+  (persistent-free-id-table-ref t (compiled-from id) fail))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

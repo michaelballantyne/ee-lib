@@ -39,6 +39,8 @@
  define/hygienic
  define/hygienic-metafunction
  wrap-hygiene
+
+ call-in-expression-context
  
  current-def-ctx
  current-ctx-id
@@ -287,6 +289,14 @@
     ; Interface macros also generate syntax with unique scopes, so we don't
     ; have to worry about use-site binders from those entry points either.
     (apply-with-hygiene f #'car ctx-type (eq? ctx-type 'expression) args)))
+
+(define (call-in-expression-context f)
+  (define result (void))
+  ((wrap-hygiene
+    (lambda ()
+      (set! result (f)))
+    'expression))
+  result)
 
 (begin-for-syntax
   (define-syntax-class ctx-type

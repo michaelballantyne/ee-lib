@@ -292,10 +292,19 @@
 
 (define (call-in-expression-context f)
   (define result (void))
-  ((wrap-hygiene
+
+  (syntax-local-apply-transformer-use-site-workaround
+   (lambda ()
+     (set! result (f)))
+   #'car
+   'expression
+   (current-def-ctx))
+  
+  #;((wrap-hygiene
     (lambda ()
       (set! result (f)))
     'expression))
+  
   result)
 
 (begin-for-syntax

@@ -410,7 +410,7 @@
           (table-set! table id result)
           (flip-intro-scope result))))
 
-  (syntax-property renamed 'compiled-from (flip-intro-scope id)))
+  (with-compiled-from renamed (flip-intro-scope id)))
 
 (define (compile-binders! ids #:table [table compiled-ids] #:reuse? [reuse? #f])
   (map (lambda (id) (compile-binder! id #:table table #:reuse? reuse?))
@@ -432,7 +432,10 @@
      (flip-intro-scope
       table-val)))
 
-  (syntax-property renamed 'compiled-from (flip-intro-scope id)))
+  (with-compiled-from renamed (flip-intro-scope id)))
+
+(define (with-compiled-from new-id old-id)
+  (syntax-property new-id 'compiled-from old-id #t))
 
 (define/who (compiled-from id)
   (define prop (syntax-property id 'compiled-from))

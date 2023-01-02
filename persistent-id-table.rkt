@@ -8,7 +8,8 @@
   (for-syntax racket/base syntax/parse)
   "private/flip-intro-scope.rkt"
   "private/syntax-datum.rkt"
-  "private/binding.rkt")
+  "private/binding.rkt"
+  "private/syntax-serializer.rkt")
 
 (provide
  syntax-datum?
@@ -18,7 +19,9 @@
  persistent-free-id-table-has-key?
  persistent-free-id-table-set!
  persistent-free-id-table-ref
- wrap-persist)
+ wrap-persist
+
+ (struct-out persistent-free-id-table))
 
 (define persistent-free-id-table-context-param (make-parameter #f))
 
@@ -93,7 +96,7 @@
   (define alist
     (for/list ([(k v) (in-free-id-table (persistent-free-id-table-transient t))])
       #`(cons #'#,(flip-intro-scope k) #,(if (syntax? v)
-                                             #`#'#,(flip-intro-scope v)
+                                             #`(deserialize-syntax #'#,(serialize-syntax (flip-intro-scope v)))
                                              #`'#,v))))
   #`(begin-for-syntax
       (do-extension! #,(persistent-free-id-table-id t)

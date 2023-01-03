@@ -2,18 +2,60 @@
 
 (provide serialize-syntax deserialize-syntax)
 
-(require racket/dict racket/match)
+(require racket/match)
 
-(struct serialized-syntax (unique-tag table contents) #:prefab)
+;; Notes and ideas
+
+;; How do we avoid collisions between the encoding and normal syntax object content now?
+;;   - gensyms we generate for our table will be different than any in the input, so if we look it up and find it
+;;     then we know it has our meaning.
+;;   - only such gensyms occur directly within syntax or datum content; the structures do not.
+
+;; The expander will retain graph structure for us I think. Where nodes in the shared graph are syntax objects.
+;; Assuming we use dedup properly such that when we encounter the same syntax object twice we don't recur inside twice.
+;;
+;; So it seems like we are properly preserving sharing right now, as best as I can tell. But we're wasting work deeply
+;; walking the full tree structure rather than cutting off fast and re-using the work we've already done. So that's a perf
+;; problem to fix.
+;;
+;; Options on improving the tree walking:
+;; 1. Use datum-map and non-syntax-map, with dedup everywhere.
+;;     Should preserve all sharing. Would avoid repetitive work on shared objects in syntax given that datum->syntax
+;;     unfolds shared structure outside of syntax wrappers. Would not avoid repeated work in shared datums in properties.
+;; 2. Revise datum-map with a `seen` table that it will check on entrance and use the recorded
+;;     result if present. This would preserve `eq` sharing throughout.
+
+;; Alternate encoding idea: only replace syntax values inside properties with gensyms.
+;; If we use syntax properties on syntax object but just lift out syntax parts within them, we could:
+;; 1. Avoid extra structures for stx-with-props, syntax-val, and datum-val
+;; 2. Avoid hash table entries for syntax with properties, only needing them for syntax *in* properties
+;; 3. Avoid wraping datums in properties as syntax
+;; 4. Have perhaps a more readable output, though not showing the properties
+
+
+
+;; table :: HashOf gensym stx-with-props
+;; contents :: syntax?
+(struct serialized-syntax (table contents) #:prefab)
+
+;; ps :: AList symbol (or syntax-val datum-val)
 (struct stx-with-props (stx ps) #:prefab)
 (struct syntax-val (stx) #:prefab)
 (struct datum-val (d) #:prefab)
-(struct ref (unique-tag sym) #:prefab)
 
 ;(require racket/pretty)
 
+(define (has-props? stx)
+  (for/or ([p (syntax-property-symbol-keys stx)])
+    (syntax-property-preserved? stx p)))
+
 (define (serialize-syntax stx)
-  (define unique-tag (gensym))
+  (define gensym
+    (let ([ctr 0])
+      (lambda ()
+        (set! ctr (+ ctr 1))
+        (string->uninterned-symbol (string-append "stx-" (number->string ctr))))))
+  
   (define table (hasheq))
   (define dedup-table (hasheq))
   (define (dedup k f)
@@ -26,7 +68,7 @@
   (define (lift! el)
     (define tag-sym (gensym))
     (set! table (hash-set table tag-sym el))
-    (ref unique-tag tag-sym))
+    tag-sym)
 
   (define (build-props! orig-s d)
     (stx-with-props
@@ -40,35 +82,37 @@
              (datum-val (serialize-element! val #:always-lift? #t))))
        (cons k serialized-val))))
 
+  ;; When #:always-lift? is true, any syntax element within will be lifted
+  ;; into the hash, even if it does not have properties. This is used to ensure
+  ;; syntax within datum-val gets lifted to establish the boundary between datum and syntax.
   (define (serialize-element! el #:always-lift? [always-lift? #f])
     (dedup
       el
       (lambda ()
         (syntax-map
           el
+          ;; at each datum element
           (lambda (tail? d) d)
+          ;; at each syntax wrapper
           (lambda (orig-s d)
             ;(when (and always-lift? (not (ref? (hash-ref dedup-table orig-s)))) ; TODO
             ;(error 'dedup "lift error"))
             (dedup
               orig-s
               (lambda ()
-                (if (or always-lift?
-                        (ormap (lambda (p) (syntax-property-preserved? orig-s p))
-                               (syntax-property-symbol-keys orig-s)))
+                (if (or always-lift? (has-props? orig-s))
                   (lift! (build-props! orig-s d))
                   (datum->syntax orig-s d orig-s #f)))))
           syntax-e))))
 
   (define top-s (serialize-element! stx))
-  (define res (datum->syntax #f (serialized-syntax unique-tag table top-s)))
+  (define res (datum->syntax #f (serialized-syntax table top-s)))
 
   res)
 
 (define (deserialize-syntax ser)
   (match (syntax-e ser)
-    [(serialized-syntax unique-tag-stx table-stx contents)
-     (define unique-tag (syntax-e unique-tag-stx))
+    [(serialized-syntax table-stx contents)
      (define table (syntax-e table-stx))
      (define dedup-table (hasheq))
      (define (dedup k f)
@@ -105,13 +149,11 @@
            (syntax-map
              el
              (lambda (tail? d)
-               (match d
-                 [(ref tag sym)
-                  #:when (equal? (maybe-syntax-e tag) unique-tag)
-                  (dedup
-                    sym
-                    (lambda () (deserialize-stx-with-props (maybe-syntax-e sym))))]
-                 [_ d]))
+               (if (and (symbol? d) (hash-has-key? table d))
+                   (dedup
+                    d
+                    (lambda () (deserialize-stx-with-props d)))
+                   d))
              (lambda (orig-s d)
                (dedup
                  orig-s
@@ -165,6 +207,23 @@
     (bound-identifier=?
       (car (syntax-property (syntax-property (cadr (syntax-e d)) ':) 'orig))
       #'Int))
+
+  (let ()
+    (define s1 #'Foo)
+    (define s2 #`(#,s1 #,s1))
+    (syntax-case (deserialize-syntax (serialize-syntax s2)) ()
+      [(a b)
+       (check-eq? #'a #'b)])
+    
+    (define s3 (syntax-property #`(#,s1) 'foo s1 #t))
+    (define s3-d (deserialize-syntax (serialize-syntax s3)))
+    (check-eq? (syntax-case s3-d () [(a) #'a]) (syntax-property s3-d 'foo))
+
+    (define v1 (cons 'x 'x))
+    (define s4 (syntax-property #'y 'foo v1 #t))
+    (define v1-d (syntax-property (deserialize-syntax (serialize-syntax s4)) 'foo))
+    (check-eq? (car v1-d) (cdr v1-d))
+    )
   )
 
 

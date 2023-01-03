@@ -96,7 +96,7 @@
   (define alist
     (for/list ([(k v) (in-free-id-table (persistent-free-id-table-transient t))])
       #`(cons #'#,(flip-intro-scope k) #,(if (syntax? v)
-                                             #`(deserialize-syntax #'#,(serialize-syntax (flip-intro-scope v)))
+                                             #`(deserialize-syntax-props #'#,(serialize-syntax-props (flip-intro-scope v)))
                                              #`'#,v))))
   #`(begin-for-syntax
       (do-extension! #,(persistent-free-id-table-id t)

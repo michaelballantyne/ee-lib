@@ -32,6 +32,8 @@
 ;; 3. Avoid wraping datums in properties as syntax
 ;; 4. Have perhaps a more readable output, though not showing the properties
 
+;; Idea: use a global weak hash table to preserve sharing across multiple serializations, as might occur when attaching
+;; complex type information to multiple bindings. (Potential issue: are weak hash operations slower?)
 
 
 ;; table :: HashOf gensym stx-with-props

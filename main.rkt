@@ -432,7 +432,8 @@
      (flip-intro-scope
       table-val)))
 
-  (with-compiled-from renamed (flip-intro-scope id)))
+  (define with-property (with-compiled-from renamed (flip-intro-scope id)))
+  (datum->syntax with-property (syntax-e with-property) id with-property))
 
 (define (with-compiled-from new-id old-id)
   (syntax-property new-id 'compiled-from old-id #t))

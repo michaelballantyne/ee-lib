@@ -457,9 +457,6 @@
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          t)
   
-  (when (and (free-id-table? t) (module-or-top-binding? (compiled-from id)))
-    (error who "local symbol tables cannot store information about module-level bindings"))
-
   (when (not (eq? unbound (symbol-table-ref t id unbound)))
     (error who "table already has an entry for key"))
   

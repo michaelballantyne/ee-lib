@@ -55,6 +55,8 @@
  compile-binders!
  compile-reference
  compiled-from
+ compiled-binder?
+ compiled-reference?
 
  define-persistent-symbol-table
  define-local-symbol-table
@@ -410,7 +412,10 @@
           (table-set! table id result)
           (flip-intro-scope result))))
 
-  (with-compiled-from renamed (flip-intro-scope id)))
+  (define annotated
+    (syntax-property renamed 'compiled-binder? #t #t))
+
+  (with-compiled-from annotated (flip-intro-scope id)))
 
 (define (compile-binders! ids #:table [table compiled-ids] #:reuse? [reuse? #f])
   (map (lambda (id) (compile-binder! id #:table table #:reuse? reuse?))
@@ -432,7 +437,10 @@
      (flip-intro-scope
       table-val)))
 
-  (define with-property (with-compiled-from renamed (flip-intro-scope id)))
+  (define annotated
+    (syntax-property renamed 'compiled-reference? #t #t))
+
+  (define with-property (with-compiled-from annotated (flip-intro-scope id)))
   (datum->syntax with-property (syntax-e with-property) id with-property))
 
 (define (with-compiled-from new-id old-id)
@@ -443,6 +451,12 @@
   (when (not prop)
     (raise-syntax-error 'compiled-from "not a compiled identifier" id))
   (flip-intro-scope prop))
+
+(define (compiled-reference? id)
+  (syntax-property id 'compiled-reference?))
+
+(define (compiled-binder? id)
+  (syntax-property id 'compiled-binder?))
 
 (define-syntax-rule
   (define-persistent-symbol-table id)

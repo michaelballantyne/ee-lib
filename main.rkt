@@ -404,7 +404,9 @@
   (define ref-result (table-ref table id #f))
 
   (define renamed
-    (if ref-result
+    (if (and ref-result
+             ;; Hack: update the table on repeated bindings for top-level ids for REPL use
+             (not (top-binding? (flip-intro-scope id))))
         (if reuse?
             (flip-intro-scope ref-result)
             (error 'compile-binder! "compiled binder already recorded for identifier ~v" id))
@@ -471,7 +473,9 @@
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          t)
   
-  (when (not (eq? unbound (symbol-table-ref t id unbound)))
+  (when (not (or (eq? unbound (symbol-table-ref t id unbound))
+                 ;; Hack: allow mutations for top-level keys for REPL use
+                 (top-binding? (flip-intro-scope (compiled-from id)))))
     (error who "table already has an entry for key"))
   
   (table-set! t (compiled-from id) val))

@@ -49,7 +49,9 @@
          #:contract "(or/c syntax? syntax-datum?)"
          val)
 
-  (when (persistent-free-id-table-has-key? t id)
+  (when (and (persistent-free-id-table-has-key? t id)
+             ;; Hack: update the table on repeated bindings for top-level ids
+             (not (top-binding? id)))
     (error 'persistent-free-id-table-set! "table already has an entry for key"))
   
   (if (module-or-top-binding? id)

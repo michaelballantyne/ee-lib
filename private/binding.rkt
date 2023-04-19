@@ -3,6 +3,7 @@
 (provide identifier-has-binding?
          identifier-with-binding?
          same-binding?
+         top-binding?
          module-or-top-binding?
          maybe-raise-ambiguity-error)
 
@@ -30,6 +31,14 @@
     (and (identifier-has-binding? id1-ext)
          (identifier-has-binding? id2-ext)
          (free-identifier=? id1-ext id2-ext))))
+
+(define/who (top-binding? id)
+  (check who identifier-with-binding? id)
+
+  (define binding
+    (identifier-binding id (syntax-local-phase-level) #t))
+    
+  (and (list? binding) (= 1 (length binding))))
 
 (define/who (module-or-top-binding? id)
   (check who identifier-with-binding? id)

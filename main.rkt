@@ -325,7 +325,7 @@
     [(_ (name:id arg:id) ctx:ctx-type
         body ...)
      #'(define-template-metafunction name
-         (wrap-hygienic
+         (wrap-hygiene
           (lambda (arg) body ...)
           ctx.type))]))
 

@@ -369,9 +369,13 @@
    (syntax-local-get-shadower id)
    'add))
 
+(define counter 0)
 (define/who (generate-same-name-temporary id)
   (check who identifier? id)
-  ((make-syntax-introducer) (datum->syntax #f (syntax-e id) id id)))
+  (set! counter (+ 1 counter))
+  ((make-syntax-introducer)
+   (datum->syntax #f
+                  (string->symbol (format "~a_~a" (symbol->string (syntax-e id)) counter)) id id)))
 
 
 (define-persistent-free-id-table compiled-ids)

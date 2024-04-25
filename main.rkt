@@ -57,6 +57,8 @@
  compiled-from
  compiled-binder?
  compiled-reference?
+ current-compile-shadower
+ make-compile-shadower
 
  define-persistent-symbol-table
  define-local-symbol-table
@@ -394,6 +396,22 @@
                           (flip-intro-scope id)
                           val)))
 
+(define current-compile-shadower (make-parameter #f))
+
+(define (apply-compile-shadower stx)
+  ((or (current-compile-shadower)
+       syntax-local-get-shadower/including-module)
+   stx))
+
+(define (make-compile-shadower)
+  (lambda (stx)
+    ((make-syntax-delta-introducer
+      (syntax-local-get-shadower/including-module (datum->syntax #f 'id))
+      (datum->syntax #f 'id))
+     stx
+     'add)))
+
+
 (define/who (compile-binder! id #:table [table compiled-ids] #:reuse? [reuse? #f])
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
@@ -410,7 +428,7 @@
         (if reuse?
             (flip-intro-scope ref-result)
             (error 'compile-binder! "compiled binder already recorded for identifier ~v" id))
-        (let ([result (generate-same-name-temporary id)])
+        (let ([result (syntax-local-get-shadower/including-module (generate-same-name-temporary id))])
           (table-set! table id result)
           (flip-intro-scope result))))
 

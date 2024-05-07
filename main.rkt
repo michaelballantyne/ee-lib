@@ -72,7 +72,8 @@
  non-module-begin-macro
  expression-macro
  definition-macro
- )
+
+ syntax-local-get-shadower/including-module)
 
 ;; TODO / bug: when the template is just a reference to a pattern variable,
 ;; these change the source location and properties on the result.

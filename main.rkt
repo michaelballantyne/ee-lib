@@ -70,6 +70,14 @@
  symbol-set-add!
  symbol-set-member?
 
+ define-local-immutable-symbol-table
+
+ symbol-table-set
+
+ define-local-immutable-symbol-set
+
+ symbol-set-add
+
  in-space
 
  module-macro
@@ -479,12 +487,15 @@
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          t)
   
+  (check-symbol-table-new-id who t id)
+  
+  (table-set! t (compiled-from id) val))
+
+(define (check-symbol-table-new-id who t id)
   (when (not (or (eq? unbound (symbol-table-ref t id unbound))
                  ;; Hack: allow mutations for top-level keys for REPL use
                  (top-binding? (flip-intro-scope (compiled-from id)))))
-    (error who "table already has an entry for key"))
-  
-  (table-set! t (compiled-from id) val))
+    (error who "table already has an entry for key")))
 
 (define (symbol-table-ref-error)
   (error 'symbol-table-ref "no value found for key"))
@@ -508,13 +519,39 @@
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          s)
-  (symbol-table-set! s id #t))
+  ; check this to avoid the "key already in table" error,
+  ; which would be confusing for a set.
+  (unless (symbol-set-member? s id)
+    (symbol-table-set! s id #t)))
 
 (define/who (symbol-set-member? s id)
   (check who (lambda (v) (or (free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c free-id-table? persistent-free-id-table?)"
          s)
   (symbol-table-ref s id #f))
+
+(define-syntax-rule
+  (define-local-immutable-symbol-table name)
+  (define name (make-immutable-free-id-table)))
+
+(define/who (symbol-table-set t id val)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         t)
+  (check-symbol-table-new-id who t id)
+  (free-id-table-set t id val))
+
+(define-syntax-rule
+  (define-local-immutable-symbol-set name)
+  (define-local-immutable-symbol-table name))
+
+(define/who (symbol-set-add s id)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         s)
+  (if (symbol-set-member? s id)
+      s
+      (free-id-table-set s id #t)))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

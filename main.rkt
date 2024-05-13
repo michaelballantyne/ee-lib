@@ -60,9 +60,15 @@
 
  define-persistent-symbol-table
  define-local-symbol-table
- 
+
  symbol-table-set!
  symbol-table-ref
+
+ define-persistent-symbol-set
+ define-local-symbol-set
+
+ symbol-set-add!
+ symbol-set-member?
 
  in-space
 
@@ -489,6 +495,26 @@
          t)
   
   (table-ref t (compiled-from id) fail))
+
+(define-syntax-rule
+  (define-local-symbol-set name)
+  (define-local-symbol-table name))
+
+(define-syntax-rule
+  (define-persistent-symbol-set name)
+  (define-persistent-symbol-table name))
+
+(define/who (symbol-set-add! s id)
+  (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
+         s)
+  (symbol-table-set! s id #t))
+
+(define/who (symbol-set-member? s id)
+  (check who (lambda (v) (or (free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c free-id-table? persistent-free-id-table?)"
+         s)
+  (symbol-table-ref s id #f))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

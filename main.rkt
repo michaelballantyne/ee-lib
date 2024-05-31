@@ -70,11 +70,11 @@
  symbol-set-add!
  symbol-set-member?
 
- local-immutable-symbol-table
+ immutable-symbol-table
 
  symbol-table-set
 
- local-immutable-symbol-set
+ immutable-symbol-set
 
  symbol-set-add
  symbol-set-remove
@@ -534,7 +534,7 @@
          s)
   (symbol-table-ref s id #f))
 
-(define (local-immutable-symbol-table) (make-immutable-free-id-table))
+(define (immutable-symbol-table) (make-immutable-free-id-table))
 
 (define/who (symbol-table-set t id val)
   (check who (lambda (v) (immutable-free-id-table? v))
@@ -543,7 +543,7 @@
   (check-symbol-table-new-id who t id)
   (free-id-table-set t id val))
 
-(define (local-immutable-symbol-set) (local-immutable-symbol-table))
+(define (immutable-symbol-set) (immutable-symbol-table))
 
 (define/who (symbol-set-add s id)
   (check who (lambda (v) (immutable-free-id-table? v))
@@ -578,7 +578,7 @@
   (check who (lambda (v) (immutable-free-id-table? v))
          #:contract "immutable-free-id-table?"
          b)
-  (for/fold ([s (local-immutable-symbol-set)])
+  (for/fold ([s (immutable-symbol-set)])
             ([(id v) (in-free-id-table a)]
              #:when (and v
                          (free-id-table-ref b id (lambda () #f))))
@@ -591,7 +591,7 @@
   (check who (lambda (v) (immutable-free-id-table? v))
          #:contract "immutable-free-id-table?"
          b)
-  (for/fold ([s (local-immutable-symbol-set)])
+  (for/fold ([s (immutable-symbol-set)])
             ([(id v) (in-free-id-table a)]
              #:when (and v
                          (not (free-id-table-ref b id (lambda () #f)))))

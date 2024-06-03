@@ -60,12 +60,14 @@
 
  define-persistent-symbol-table
  define-local-symbol-table
+ local-symbol-table
 
  symbol-table-set!
  symbol-table-ref
 
  define-persistent-symbol-set
  define-local-symbol-set
+ local-symbol-set
 
  symbol-set-add!
  symbol-set-member?
@@ -486,6 +488,10 @@
   (define-local-symbol-table id)
   (define id (make-free-id-table)))
 
+(define (local-symbol-table)
+  (define-local-symbol-table table)
+  table)
+
 (define/who (symbol-table-set! t id val)
   (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
@@ -515,6 +521,12 @@
   (define-local-symbol-set name)
   (define-local-symbol-table name))
 
+(define (local-symbol-set . ids)
+  (define-local-symbol-set s)
+  (for ([id ids])
+    (symbol-set-add! s id))
+  s)
+
 (define-syntax-rule
   (define-persistent-symbol-set name)
   (define-persistent-symbol-table name))
@@ -543,7 +555,10 @@
   (check-symbol-table-new-id who t id)
   (free-id-table-set t id val))
 
-(define (immutable-symbol-set) (immutable-symbol-table))
+(define (immutable-symbol-set . ids)
+  (for/fold ([s (immutable-symbol-table)])
+            ([id ids])
+    (symbol-set-add s id)))
 
 (define/who (symbol-set-add s id)
   (check who (lambda (v) (immutable-free-id-table? v))

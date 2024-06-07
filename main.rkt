@@ -60,9 +60,27 @@
 
  define-persistent-symbol-table
  define-local-symbol-table
- 
+
  symbol-table-set!
  symbol-table-ref
+
+ define-persistent-symbol-set
+ define-local-symbol-set
+
+ symbol-set-add!
+ symbol-set-member?
+
+ immutable-symbol-table
+
+ symbol-table-set
+
+ immutable-symbol-set
+
+ symbol-set-add
+ symbol-set-remove
+ symbol-set-union
+ symbol-set-intersection
+ symbol-set-subtract
 
  in-space
 
@@ -326,7 +344,7 @@
     [(_ (name:id arg:id) ctx:ctx-type
         body ...)
      #'(define-template-metafunction name
-         (wrap-hygienic
+         (wrap-hygiene
           (lambda (arg) body ...)
           ctx.type))]))
 
@@ -474,12 +492,15 @@
          #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
          t)
   
+  (check-symbol-table-new-id who t id)
+  
+  (table-set! t (compiled-from id) val))
+
+(define (check-symbol-table-new-id who t id)
   (when (not (or (eq? unbound (symbol-table-ref t id unbound))
                  ;; Hack: allow mutations for top-level keys for REPL use
                  (top-binding? (flip-intro-scope (compiled-from id)))))
-    (error who "table already has an entry for key"))
-  
-  (table-set! t (compiled-from id) val))
+    (error who "table already has an entry for key")))
 
 (define (symbol-table-ref-error)
   (error 'symbol-table-ref "no value found for key"))
@@ -490,6 +511,92 @@
          t)
   
   (table-ref t (compiled-from id) fail))
+
+(define-syntax-rule
+  (define-local-symbol-set name)
+  (define-local-symbol-table name))
+
+(define-syntax-rule
+  (define-persistent-symbol-set name)
+  (define-persistent-symbol-table name))
+
+(define/who (symbol-set-add! s id)
+  (check who (lambda (v) (or (mutable-free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c mutable-free-id-table? persistent-free-id-table?)"
+         s)
+  ; check this to avoid the "key already in table" error,
+  ; which would be confusing for a set.
+  (unless (symbol-set-member? s id)
+    (symbol-table-set! s id #t)))
+
+(define/who (symbol-set-member? s id)
+  (check who (lambda (v) (or (free-id-table? v) (persistent-free-id-table? v)))
+         #:contract "(or/c free-id-table? persistent-free-id-table?)"
+         s)
+  (symbol-table-ref s id #f))
+
+(define (immutable-symbol-table) (make-immutable-free-id-table))
+
+(define/who (symbol-table-set t id val)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         t)
+  (check-symbol-table-new-id who t id)
+  (free-id-table-set t id val))
+
+(define (immutable-symbol-set) (immutable-symbol-table))
+
+(define/who (symbol-set-add s id)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         s)
+  (if (symbol-set-member? s id)
+      s
+      (free-id-table-set s id #t)))
+
+(define/who (symbol-set-remove s id)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         s)
+  (free-id-table-remove s id))
+
+(define/who (symbol-set-union a b)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         a)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         b)
+  (for/fold ([s a])
+            ([(id v) (in-free-id-table b)]
+             #:when v)
+    (symbol-set-add s id)))
+
+(define/who (symbol-set-intersection a b)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         a)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         b)
+  (for/fold ([s (immutable-symbol-set)])
+            ([(id v) (in-free-id-table a)]
+             #:when (and v
+                         (free-id-table-ref b id (lambda () #f))))
+    (symbol-set-add s id)))
+
+(define/who (symbol-set-subtract a b)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         a)
+  (check who (lambda (v) (immutable-free-id-table? v))
+         #:contract "immutable-free-id-table?"
+         b)
+  (for/fold ([s (immutable-symbol-set)])
+            ([(id v) (in-free-id-table a)]
+             #:when (and v
+                         (not (free-id-table-ref b id (lambda () #f)))))
+    (symbol-set-add s id)))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)

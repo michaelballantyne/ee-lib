@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require 
+  racket/sequence
   racket/syntax
   syntax/parse
   syntax/parse/define
@@ -662,10 +663,12 @@
     (symbol-set-add s id)))
 
 (define (in-symbol-table t)
-  (error "todo"))
+  (sequence-map (lambda (id v) (values (compile-binder! id #:reuse? #t) v))
+                (symbol-table-id-table t)))
 
 (define (in-symbol-set s)
-  (error "todo"))
+  (sequence-map (lambda (id _) id)
+                (symbol-set-table s)))
 
 (define/who (in-space binding-space)
   (check who symbol? #:or-false binding-space)
